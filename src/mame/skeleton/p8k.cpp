@@ -116,7 +116,11 @@ public:
 	p8k_wdc_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0)
 		: device_t(mconfig, P8K_WDC, tag, owner, clock)
 		, m_hdd(*this, "hdd")
+		, m_status_cb(*this)
 	{ }
+
+	// the status lines (ST0..ST2, TR) of the PIO port B inputs changed
+	auto status_cb() { return m_status_cb.bind(); }
 
 	// host side (PIO2)
 	uint8_t data_r();
@@ -178,7 +182,7 @@ private:
 
 	void wdc_reset();
 	void enter_cmd();
-	void set_status(uint8_t status) { m_status = status; }
+	void set_status(uint8_t status) { m_status = status; m_status_cb(status_r()); }
 	void begin_busy(int tm, const attotime &delay);
 	void start_tx(unsigned len);
 	void start_rx(unsigned len, int cont);
@@ -206,6 +210,7 @@ private:
 	void init_disk();
 
 	required_device<harddisk_image_device> m_hdd;
+	devcb_write8 m_status_cb;
 	emu_timer *m_timer = nullptr;
 
 	// bus state
@@ -884,8 +889,17 @@ public:
 	p8k_state(const machine_config &mconfig, device_type type, const char *tag)
 		: driver_device(mconfig, type, tag)
 		, m_maincpu(*this, "maincpu")
+		, m_cpu16(*this, "cpu16")
 		, m_daisy(*this, "p8k_16_daisy")
+		, m_pio0(*this, "pio0")
 		, m_pio2(*this, "pio2")
+		, m_u_ctc0(*this, "u_ctc0")
+		, m_u_ctc1(*this, "u_ctc1")
+		, m_u_sio0(*this, "u_sio0")
+		, m_u_sio1(*this, "u_sio1")
+		, m_u_pio0(*this, "u_pio0")
+		, m_u_pio1(*this, "u_pio1")
+		, m_u_pio2(*this, "u_pio2")
 		, m_wdc(*this, "wdc")
 		, m_i8272(*this, "i8272")
 		, m_ram(*this, "ram", 0x100000, ENDIANNESS_BIG)
@@ -919,6 +933,27 @@ private:
 	void p8k_16_daisy_interrupt(int state);
 	uint8_t pio2_r(offs_t offset);
 	void pio2_w(offs_t offset, uint8_t data);
+
+	// coupling of the two boards
+	uint8_t pio0_r(offs_t offset);
+	void pio0_w(offs_t offset, uint8_t data);
+	uint8_t u_pio0_r(offs_t offset);
+	void u_pio0_w(offs_t offset, uint8_t data);
+	void p16a_w(uint8_t data);
+	void p16b_w(uint8_t data);
+	uint8_t coupling_pio0_a_r();
+	uint8_t coupling_pio0_b_r();
+	uint8_t coupling_u_pio0_b_r();
+	void coupling_u_pio0_b_w(uint8_t data);
+	uint8_t coupling_u_pio1_a_r();
+	uint8_t coupling_u_pio1_b_r();
+	void coupling_ardy0_w(int state) { coupling_ardy0_set(state, false); }
+	void coupling_ardy0_set(int state, bool data_written);
+	void coupling_u_pio0_a_w(uint8_t data);   // 16 bit PIO0 A ready: data for the 8 bit board
+	void coupling_ardy1_w(int state);   // 16 bit PIO1 A ready: 16 bit side can take data
+	void coupling_ardy8_w(int state);   // 8 bit PIO0 A ready: 8 bit side took the data
+	void coupling_update_8bit();
+	void u8000_reset(bool held);
 	uint8_t memory_read_byte(offs_t offset);
 	void memory_write_byte(offs_t offset, uint8_t data);
 	uint8_t io_read_byte(offs_t offset);
@@ -944,7 +979,16 @@ private:
 	void nbr_w(uint8_t data) { m_nbr = data; }
 	uint8_t trpl_r() { return m_reg_trpl; }
 	uint8_t if1l_r() { return m_reg_if1l; }
-	void softreset_w(uint8_t) { machine().schedule_soft_reset(); }
+	void softreset_w(uint8_t)
+	{
+		// resets the 16 bit board only, the 8 bit board keeps running
+		if (m_cpu16)
+		{
+			board16_reset();
+			u8000_reset(false);
+		}
+	}
+	void board16_reset();
 	uint8_t mmu_cmd_r(offs_t offset);
 	void mmu_cmd_w(offs_t offset, uint8_t data);
 	void invalidate16();
@@ -956,9 +1000,18 @@ private:
 	void p8k_iomap(address_map &map) ATTR_COLD;
 	void p8k_memmap(address_map &map) ATTR_COLD;
 
-	required_device<cpu_device> m_maincpu; // Z80 or Z8001 depending on the machine
+	required_device<z80_device> m_maincpu;        // 8 bit board
+	optional_device<z8001_device> m_cpu16;        // 16 bit board
 	optional_device<p8k_16_daisy_device> m_daisy;
-	optional_device<z80pio_device> m_pio2;
+	required_device<z80pio_device> m_pio0;        // 8 bit board: coupling PIO
+	optional_device<z80pio_device> m_pio2;        // 8 bit board
+	optional_device<z80ctc_device> m_u_ctc0;
+	optional_device<z80ctc_device> m_u_ctc1;
+	optional_device<z80sio_device> m_u_sio0;
+	optional_device<z80sio_device> m_u_sio1;
+	optional_device<z80pio_device> m_u_pio0;      // 16 bit board: coupling PIO (to 8 bit)
+	optional_device<z80pio_device> m_u_pio1;      // 16 bit board: coupling PIO (from 8 bit)
+	optional_device<z80pio_device> m_u_pio2;      // 16 bit board: WDC
 	optional_device<p8k_wdc_device> m_wdc;
 	optional_device<i8272a_device> m_i8272;
 
@@ -971,6 +1024,14 @@ private:
 	optional_device<z8010_device> m_mmu_code;
 	optional_device<z8010_device> m_mmu_data;
 	optional_device<z8010_device> m_mmu_stck;
+	// coupling state
+	uint8_t m_p16a = 0;               // 8 -> 16 bit data latch
+	uint8_t m_p16b = 0;               // 8 -> 16 bit status latch (bit 7 = STB, bit 0 = INT16)
+	bool m_ardy0 = false;
+	bool m_ardy1 = false;
+	bool m_u_pio0_writing = false;
+	uint8_t m_u_pio0_a_bus = 0;
+	bool m_u8000_held = true;
 	uint8_t m_scr = 0;                // system configuration register (4 bit)
 	uint8_t m_nbr = 0;                // normal break register
 	uint8_t m_reg_trpl = 0;           // trap low byte register
@@ -1012,7 +1073,9 @@ void p8k_state::p8k_iomap(address_map &map)
 	map.global_mask(0xff);
 	map(0x00, 0x07).rw(FUNC(p8k_state::port0_r), FUNC(p8k_state::port0_w)); // MH7489
 	map(0x08, 0x0b).rw("ctc0", FUNC(z80ctc_device::read), FUNC(z80ctc_device::write));
-	map(0x0c, 0x0f).rw("pio0", FUNC(z80pio_device::read_alt), FUNC(z80pio_device::write_alt));
+	map(0x0c, 0x0f).rw(FUNC(p8k_state::pio0_r), FUNC(p8k_state::pio0_w));
+	map(0x10, 0x10).w(FUNC(p8k_state::p16a_w));   // data to the 16 bit board
+	map(0x14, 0x14).w(FUNC(p8k_state::p16b_w));   // status/strobe/INT to the 16 bit board
 	map(0x18, 0x1b).rw("pio1", FUNC(z80pio_device::read_alt), FUNC(z80pio_device::write_alt));
 	map(0x1c, 0x1f).rw(m_pio2, FUNC(z80pio_device::read_alt), FUNC(z80pio_device::write_alt));
 	map(0x20, 0x21).m(m_i8272, FUNC(i8272a_device::map));
@@ -1140,12 +1203,20 @@ INPUT_PORTS_END
 
 INPUT_CHANGED_MEMBER(p8k_state::nmi_button)
 {
-	m_maincpu->set_input_line(INPUT_LINE_NMI, newval ? ASSERT_LINE : CLEAR_LINE);
+	// with a 16 bit board the NMI key goes to the board that is currently released
+	// (PIO0 B7 of the 8 bit board = /NMI_UM)
+	if (m_cpu16 && !m_u8000_held)
+		m_cpu16->set_input_line(INPUT_LINE_NMI, newval ? ASSERT_LINE : CLEAR_LINE);
+	else
+		m_maincpu->set_input_line(INPUT_LINE_NMI, newval ? ASSERT_LINE : CLEAR_LINE);
 }
 
 
 MACHINE_RESET_MEMBER(p8k_state,p8k)
 {
+	if (m_cpu16)
+		board16_reset();
+
 	membank("bank0")->set_entry(0);
 	membank("bank1")->set_entry(0);
 	membank("bank2")->set_entry(0);
@@ -1167,6 +1238,12 @@ MACHINE_RESET_MEMBER(p8k_state,p8k)
 void p8k_state::init_p8k()
 {
 	uint8_t *RAM = memregion("maincpu")->base();
+
+	// the two 4K monitor ROMs are not fully decoded and appear repeatedly in bank A
+	// (the monitor copies the coupling code from 0DB00h)
+	for (int i = 2; i < 16; i++)
+		memcpy(&RAM[i * 0x1000], &RAM[(i & 1) * 0x1000], 0x1000);
+
 	membank("bank0")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
 	membank("bank1")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
 	membank("bank2")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
@@ -1258,7 +1335,7 @@ bool p8k_state::translate16(int spacenum, bool write, offs_t &offset)
 	bool const side_effects = !machine().side_effects_disabled();
 	bool const code_access = (spacenum == AS_PROGRAM);
 	bool const stack_access = (spacenum == z8001_device::AS_STACK);
-	z8001_device &cpu = *static_cast<z8001_device *>(m_maincpu.target());
+	z8001_device &cpu = *static_cast<z8001_device *>(m_cpu16.target());
 
 	offset <<= 1;
 
@@ -1317,9 +1394,9 @@ void p8k_state::ram16_w(address_space &space, offs_t offset, uint16_t data, uint
 
 void p8k_state::install_memory16()
 {
-	address_space &pspace = m_maincpu->space(AS_PROGRAM);
-	address_space &dspace = m_maincpu->space(AS_DATA);
-	address_space &sspace = m_maincpu->space(z8001_device::AS_STACK);
+	address_space &pspace = m_cpu16->space(AS_PROGRAM);
+	address_space &dspace = m_cpu16->space(AS_DATA);
+	address_space &sspace = m_cpu16->space(z8001_device::AS_STACK);
 
 	for (address_space *space : { &pspace, &dspace, &sspace })
 		space->install_readwrite_handler(0x00'0000, 0x7f'ffff,
@@ -1329,7 +1406,7 @@ void p8k_state::install_memory16()
 	dspace.install_view(0x0000, 0x7fff, m_view_data);
 	sspace.install_view(0x0000, 0x7fff, m_view_stck);
 
-	void *const rom = memregion("maincpu")->base();
+	void *const rom = memregion("cpu16")->base();
 	m_view_code[0].install_rom(0x0000, 0x3fff, rom);
 	m_view_code[0].install_ram(0x4000, 0x7fff, &m_local_ram[0]);
 	m_view_data[0].install_rom(0x0000, 0x3fff, rom);
@@ -1339,9 +1416,9 @@ void p8k_state::install_memory16()
 
 void p8k_state::invalidate16()
 {
-	m_maincpu->space(AS_PROGRAM).invalidate_caches(read_or_write::READWRITE);
-	m_maincpu->space(AS_DATA).invalidate_caches(read_or_write::READWRITE);
-	m_maincpu->space(z8001_device::AS_STACK).invalidate_caches(read_or_write::READWRITE);
+	m_cpu16->space(AS_PROGRAM).invalidate_caches(read_or_write::READWRITE);
+	m_cpu16->space(AS_DATA).invalidate_caches(read_or_write::READWRITE);
+	m_cpu16->space(z8001_device::AS_STACK).invalidate_caches(read_or_write::READWRITE);
 }
 
 void p8k_state::scr_w(uint8_t data)
@@ -1369,19 +1446,6 @@ void p8k_state::scr_w(uint8_t data)
 		invalidate16();
 }
 
-MACHINE_RESET_MEMBER(p8k_state, p8k_16)
-{
-	m_scr = 0;
-	m_nbr = 0;
-	m_reg_trpl = 0;
-	m_reg_if1l = 0;
-	m_normal_mode = false;
-	m_segt_state = false;
-	m_view_code.select(0);
-	m_view_data.select(0);
-	m_view_stck.select(0);
-}
-
 // segment trap: the address low bytes are latched at the moment the trap is raised
 void p8k_state::segt_interrupt(int state)
 {
@@ -1391,7 +1455,7 @@ void p8k_state::segt_interrupt(int state)
 		m_reg_if1l = m_if1_low;
 	}
 	m_segt_state = (state != 0);
-	m_maincpu->set_input_line(z8001_device::SEGT_LINE, state ? ASSERT_LINE : CLEAR_LINE);
+	m_cpu16->set_input_line(z8001_device::SEGT_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
 void p8k_state::ns16_w(int state)
@@ -1456,14 +1520,202 @@ void p8k_state::p8k_16_sio_map(address_map &map)
 }
 
 
+
+/***************************************************************************
+
+    Coupling of the 8 bit and the 16 bit board
+
+    16 -> 8 : 16 bit PIO0 port A (output, mode 0) -> 8 bit PIO0 port A (input, mode 1)
+              The ready line of each PIO strobes the other one.
+              PIO0 B bit 0 = INT8, bits 1-4 = status
+    8 -> 16 : two output latches on the 8 bit board (P16A = data, P16B = status)
+              feed 16 bit PIO1 (A: input mode 1, B: bit control).
+              P16B bit 7 = strobe, bit 0 = INT16, bits 1-6 = status
+    The ready lines are visible to the other side as bits 5 and 6 of PIO0 B:
+              8 bit : bit 5 = data from the 16 bit side pending (ARDY0),
+                      bit 6 = 16 bit side can take data (ARDY1)
+              16 bit: bit 5 = ARDY1, bit 6 = ARDY0
+    8 bit PIO0 B bit 7 holds the 16 bit board in reset.
+
+***************************************************************************/
+
+uint8_t p8k_state::pio0_r(offs_t offset)
+{
+	return m_pio0->read_alt(offset);
+}
+
+void p8k_state::pio0_w(offs_t offset, uint8_t data)
+{
+	m_pio0->write_alt(offset, data);
+
+	// port B bit 7 controls /RESET_U8000; a latch change is not reported when only the mode changes
+	if (m_cpu16 && (offset == 2 || offset == 3))
+		u8000_reset(BIT(m_pio0->port_b_read(), 7));
+}
+
+void p8k_state::board16_reset()
+{
+	m_scr = 0;
+	m_nbr = 0;
+	m_reg_trpl = 0;
+	m_reg_if1l = 0;
+	m_normal_mode = false;
+	m_segt_state = false;
+	m_p16a = m_p16b = 0;
+	m_u_pio0_a_bus = 0;
+	m_ardy0 = m_ardy1 = false;
+	m_view_code.select(0);
+	m_view_data.select(0);
+	m_view_stck.select(0);
+	m_u_ctc0->reset();
+	m_u_ctc1->reset();
+	m_u_sio0->reset();
+	m_u_sio1->reset();
+	m_u_pio0->reset();
+	m_u_pio1->reset();
+	m_u_pio2->reset();
+	m_u8000_held = false;   // force the transition in u8000_reset()
+	u8000_reset(true);
+}
+
+void p8k_state::u8000_reset(bool held)
+{
+	bool const was_held = m_u8000_held;
+	m_u8000_held = held;
+
+	if (held)
+	{
+		m_cpu16->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+		if (!was_held)
+		{
+			// the coupling logic is reset together with the 16 bit board
+			m_u_pio0->reset();
+			m_u_pio1->reset();
+			m_p16a = m_p16b = 0;
+			m_ardy0 = m_ardy1 = false;
+			coupling_update_8bit();
+		}
+	}
+	else
+	{
+		m_cpu16->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+	}
+}
+
+uint8_t p8k_state::u_pio0_r(offs_t offset)
+{
+	return m_u_pio0->read(offset);
+}
+
+void p8k_state::u_pio0_w(offs_t offset, uint8_t data)
+{
+	m_u_pio0_writing = true;
+	m_u_pio0->write(offset, data);
+	m_u_pio0_writing = false;
+
+	if (offset == 0)
+	{
+		// data for the 8 bit board: present it, then strobe its PIO (ARDY0 -> ASTB-)
+		m_ardy0 = true;
+		m_pio0->strobe_a(0);
+		m_pio0->strobe_a(1);
+		coupling_update_8bit();
+	}
+	else if (offset == 1 || offset == 3)
+	{
+		// PIO0 B bits 0-4 are visible on the 8 bit board
+		coupling_update_8bit();
+	}
+}
+
+void p8k_state::coupling_update_8bit()
+{
+	// tell the 8 bit PIO that its port B inputs may have changed (interrupt on INT8)
+	uint8_t const b = (m_u_pio0->port_b_read() & 0x1f) | (m_ardy0 ? 0x20 : 0) | (m_ardy1 ? 0x40 : 0);
+	m_pio0->port_b_write(b);
+}
+
+void p8k_state::p16a_w(uint8_t data)
+{
+	m_p16a = data;
+}
+
+void p8k_state::p16b_w(uint8_t data)
+{
+	m_p16b = data;
+	if (!m_cpu16 || m_u8000_held)
+		return;
+
+	m_u_pio1->port_b_write(data & 0x7f);
+	m_u_pio1->strobe_a(BIT(data, 7));
+}
+
+uint8_t p8k_state::coupling_pio0_a_r()
+{
+	return m_u_pio0_a_bus;
+}
+
+void p8k_state::coupling_u_pio0_a_w(uint8_t data)
+{
+	m_u_pio0_a_bus = data;
+}
+
+uint8_t p8k_state::coupling_pio0_b_r()
+{
+	return (m_u_pio0->port_b_read() & 0x1f) | (m_ardy0 ? 0x20 : 0) | (m_ardy1 ? 0x40 : 0);
+}
+
+uint8_t p8k_state::coupling_u_pio0_b_r()
+{
+	return (m_ardy1 ? 0x20 : 0) | (m_ardy0 ? 0x40 : 0);
+}
+
+void p8k_state::coupling_u_pio0_b_w(uint8_t data)
+{
+	coupling_update_8bit();
+}
+
+uint8_t p8k_state::coupling_u_pio1_a_r()
+{
+	return m_p16a;
+}
+
+uint8_t p8k_state::coupling_u_pio1_b_r()
+{
+	return m_p16b & 0x7f;
+}
+
+void p8k_state::coupling_ardy0_set(int state, bool data_written)
+{
+	// the PIO pulses RDY while data is written (before the output latch is valid);
+	// the data transfer to the 8 bit board is done in u_pio0_w. Here only the
+	// acknowledge (RDY low after the 8 bit side took the data) is of interest.
+	if (m_u_pio0_writing || state)
+		return;
+
+	m_ardy0 = false;
+	coupling_update_8bit();
+}
+
+void p8k_state::coupling_ardy1_w(int state)
+{
+	m_ardy1 = state;
+	coupling_update_8bit();
+}
+
+void p8k_state::coupling_ardy8_w(int state)
+{
+	m_u_pio0->strobe_a(state);
+}
+
 uint8_t p8k_state::pio2_r(offs_t offset)
 {
-	return m_pio2->read(offset);
+	return m_u_pio2->read(offset);
 }
 
 void p8k_state::pio2_w(offs_t offset, uint8_t data)
 {
-	m_pio2->write(offset, data);
+	m_u_pio2->write(offset, data);
 
 	// PIO2 port A data register: the WDC sees only real data writes
 	if (offset == 0)
@@ -1471,19 +1723,19 @@ void p8k_state::pio2_w(offs_t offset, uint8_t data)
 
 	// port B drives RESET and TE: the PIO does not report latch changes when its mode changes
 	if (offset == 1 || offset == 3)
-		m_wdc->control_w(m_pio2->port_b_read());
+		m_wdc->control_w(m_u_pio2->port_b_read());
 }
 
 void p8k_state::p8k_16_iomap(address_map &map)
 {
 //  map(0x0fef0, 0x0feff) // clock
-	map(0x0ff80, 0x0ff87).rw("sio", FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
-	map(0x0ff88, 0x0ff8f).rw("sio1", FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
-	map(0x0ff90, 0x0ff97).rw("pio0", FUNC(z80pio_device::read), FUNC(z80pio_device::write)).umask16(0x00ff);
-	map(0x0ff98, 0x0ff9f).rw("pio1", FUNC(z80pio_device::read), FUNC(z80pio_device::write)).umask16(0x00ff);
+	map(0x0ff80, 0x0ff87).rw(m_u_sio0, FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
+	map(0x0ff88, 0x0ff8f).rw(m_u_sio1, FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
+	map(0x0ff90, 0x0ff97).rw(FUNC(p8k_state::u_pio0_r), FUNC(p8k_state::u_pio0_w)).umask16(0x00ff);
+	map(0x0ff98, 0x0ff9f).rw(m_u_pio1, FUNC(z80pio_device::read), FUNC(z80pio_device::write)).umask16(0x00ff);
 	map(0x0ffa0, 0x0ffa7).rw(FUNC(p8k_state::pio2_r), FUNC(p8k_state::pio2_w)).umask16(0x00ff);
-	map(0x0ffa8, 0x0ffaf).rw("ctc0", FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
-	map(0x0ffb0, 0x0ffb7).rw("ctc1", FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
+	map(0x0ffa8, 0x0ffaf).rw(m_u_ctc0, FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
+	map(0x0ffb0, 0x0ffb7).rw(m_u_ctc1, FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
 	map(0x0ffc0, 0x0ffc1).rw(FUNC(p8k_state::scr_r), FUNC(p8k_state::scr_w)).umask16(0x00ff);
 	map(0x0ffd0, 0x0ffd1).rw(FUNC(p8k_state::nbr_r), FUNC(p8k_state::nbr_w)).umask16(0x00ff);
 	map(0x0ffe0, 0x0ffe1).w(m_daisy, FUNC(p8k_16_daisy_device::reti_w)).umask16(0x00ff);
@@ -1501,7 +1753,7 @@ void p8k_state::p8k_16_iomap(address_map &map)
 
 void p8k_state::p8k_16_daisy_interrupt(int state)
 {
-	m_maincpu->set_input_line(z8001_device::VI_LINE, state ? ASSERT_LINE : CLEAR_LINE);
+	m_cpu16->set_input_line(z8001_device::VI_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
 
@@ -1509,13 +1761,13 @@ void p8k_state::p8k_16_daisy_interrupt(int state)
 
 static const z80_daisy_config p8k_16_daisy_chain[] =
 {
-	{ "ctc0" },
-	{ "ctc1" },
-	{ "sio" },
-	{ "sio1" },
-	{ "pio0" },
-	{ "pio1" },
-	{ "pio2" },
+	{ "u_ctc0" },
+	{ "u_ctc1" },
+	{ "u_sio0" },
+	{ "u_sio1" },
+	{ "u_pio0" },
+	{ "u_pio1" },
+	{ "u_pio2" },
 	{ nullptr }
 };
 
@@ -1600,8 +1852,8 @@ void p8k_state::p8k(machine_config &config)
 	z80sio_device& sio1(Z80SIO(config, "sio1", 16_MHz_XTAL / 4));
 	sio1.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
-	z80pio_device& pio0(Z80PIO(config, "pio0", 1229000));
-	pio0.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
+	Z80PIO(config, m_pio0, 1229000);
+	m_pio0->out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
 	z80pio_device& pio1(Z80PIO(config, "pio1", 1229000));
 	pio1.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
@@ -1623,73 +1875,81 @@ void p8k_state::p8k(machine_config &config)
 
 void p8k_state::p8k_16(machine_config &config)
 {
-	/* basic machine hardware */
-	z8001_device &maincpu(Z8001(config, m_maincpu, XTAL(4'000'000)));
-	maincpu.set_addrmap(AS_PROGRAM, &p8k_state::p8k_16_memmap);
-	maincpu.set_addrmap(AS_DATA, &p8k_state::p8k_16_datamap);
-	maincpu.set_addrmap(z8001_device::AS_STACK, &p8k_state::p8k_16_datamap);
-	maincpu.set_addrmap(AS_IO, &p8k_state::p8k_16_iomap);
-	maincpu.set_addrmap(z8001_device::AS_SIO, &p8k_state::p8k_16_sio_map);
-	maincpu.viack().set(FUNC(p8k_state::viack16_r));
-	maincpu.nmiack().set(FUNC(p8k_state::nmiack16_r));
-	maincpu.segtack().set(FUNC(p8k_state::segtack_r));
-	maincpu.ns().set(FUNC(p8k_state::ns16_w));
+	// the 16 bit system always consists of an 8 bit board and a 16 bit board
+	// that are coupled through two PIOs
+	p8k(config);
+
+	/* 16 bit board: CPU and memory management */
+	z8001_device &cpu16(Z8001(config, m_cpu16, XTAL(4'000'000)));
+	cpu16.set_addrmap(AS_PROGRAM, &p8k_state::p8k_16_memmap);
+	cpu16.set_addrmap(AS_DATA, &p8k_state::p8k_16_datamap);
+	cpu16.set_addrmap(z8001_device::AS_STACK, &p8k_state::p8k_16_datamap);
+	cpu16.set_addrmap(AS_IO, &p8k_state::p8k_16_iomap);
+	cpu16.set_addrmap(z8001_device::AS_SIO, &p8k_state::p8k_16_sio_map);
+	cpu16.viack().set(FUNC(p8k_state::viack16_r));
+	cpu16.nmiack().set(FUNC(p8k_state::nmiack16_r));
+	cpu16.segtack().set(FUNC(p8k_state::segtack_r));
+	cpu16.ns().set(FUNC(p8k_state::ns16_w));
 
 	Z8010(config, m_mmu_code, 4'000'000).out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
 	Z8010(config, m_mmu_data, 4'000'000).out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
 	Z8010(config, m_mmu_stck, 4'000'000).out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
 
-	MCFG_MACHINE_RESET_OVERRIDE(p8k_state, p8k_16)
-
 	P8K_16_DAISY(config, m_daisy);
 	m_daisy->set_daisy_config(p8k_16_daisy_chain);
 
-	clock_device &uart_clock(CLOCK(config, "uart_clock", 307200));
-	uart_clock.signal_handler().set("sio", FUNC(z80sio_device::txcb_w));
-	uart_clock.signal_handler().append("sio", FUNC(z80sio_device::rxcb_w));
+	clock_device &uart_clock(CLOCK(config, "u_uart_clock", 307200));
+	uart_clock.signal_handler().set(m_u_sio0, FUNC(z80sio_device::txcb_w));
+	uart_clock.signal_handler().append(m_u_sio0, FUNC(z80sio_device::rxcb_w));
 
 	/* peripheral hardware */
-	z80ctc_device& ctc0(Z80CTC(config, "ctc0", XTAL(4'000'000)));
-	ctc0.intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80CTC(config, m_u_ctc0, XTAL(4'000'000)).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80CTC(config, m_u_ctc1, XTAL(4'000'000)).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
-	z80ctc_device& ctc1(Z80CTC(config, "ctc1", XTAL(4'000'000)));
-	ctc1.intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80SIO(config, m_u_sio0, XTAL(4'000'000));
+	m_u_sio0->out_txdb_callback().set("u_rs232", FUNC(rs232_port_device::write_txd));
+	m_u_sio0->out_dtrb_callback().set("u_rs232", FUNC(rs232_port_device::write_dtr));
+	m_u_sio0->out_rtsb_callback().set("u_rs232", FUNC(rs232_port_device::write_rts));
+	m_u_sio0->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
-	z80sio_device& sio(Z80SIO(config, "sio", XTAL(4'000'000)));
-	sio.out_txdb_callback().set("rs232", FUNC(rs232_port_device::write_txd));
-	sio.out_dtrb_callback().set("rs232", FUNC(rs232_port_device::write_dtr));
-	sio.out_rtsb_callback().set("rs232", FUNC(rs232_port_device::write_rts));
-	sio.out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	rs232_port_device &rs232(RS232_PORT(config, "u_rs232", default_rs232_devices, nullptr));
+	rs232.rxd_handler().set(m_u_sio0, FUNC(z80sio_device::rxb_w));
+	rs232.cts_handler().set(m_u_sio0, FUNC(z80sio_device::ctsb_w));
 
-	rs232_port_device &rs232(RS232_PORT(config, "rs232", default_rs232_devices, "terminal"));
-	rs232.rxd_handler().set("sio", FUNC(z80sio_device::rxb_w));
-	rs232.cts_handler().set("sio", FUNC(z80sio_device::ctsb_w));
+	Z80SIO(config, m_u_sio1, XTAL(4'000'000)).out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
-	z80sio_device& sio1(Z80SIO(config, "sio1", XTAL(4'000'000)));
-	sio1.out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	// coupling PIOs: PIO0 sends to the 8 bit board, PIO1 receives from it
+	Z80PIO(config, m_u_pio0, XTAL(4'000'000));
+	m_u_pio0->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	m_u_pio0->out_pb_callback().set(FUNC(p8k_state::coupling_u_pio0_b_w));
+	m_u_pio0->in_pb_callback().set(FUNC(p8k_state::coupling_u_pio0_b_r));
+	m_u_pio0->out_ardy_callback().set(FUNC(p8k_state::coupling_ardy0_w));
+	m_u_pio0->out_pa_callback().set(FUNC(p8k_state::coupling_u_pio0_a_w));
 
-	z80pio_device& pio0(Z80PIO(config, "pio0", XTAL(4'000'000)));
-	pio0.out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80PIO(config, m_u_pio1, XTAL(4'000'000));
+	m_u_pio1->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	m_u_pio1->in_pa_callback().set(FUNC(p8k_state::coupling_u_pio1_a_r));
+	m_u_pio1->in_pb_callback().set(FUNC(p8k_state::coupling_u_pio1_b_r));
+	m_u_pio1->out_ardy_callback().set(FUNC(p8k_state::coupling_ardy1_w));
 
-	z80pio_device& pio1(Z80PIO(config, "pio1", XTAL(4'000'000)));
-	pio1.out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-
-	Z80PIO(config, m_pio2, XTAL(4'000'000));
-	m_pio2->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80PIO(config, m_u_pio2, XTAL(4'000'000));
+	m_u_pio2->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
 	// Winchester controller (software emulation) on PIO2
 	P8K_WDC(config, m_wdc, 0);
-	m_pio2->in_pa_callback().set(m_wdc, FUNC(p8k_wdc_device::data_r));
-	m_pio2->in_pb_callback().set(m_wdc, FUNC(p8k_wdc_device::status_r));
-	m_pio2->out_pb_callback().set(m_wdc, FUNC(p8k_wdc_device::control_w));
+	m_u_pio2->in_pa_callback().set(m_wdc, FUNC(p8k_wdc_device::data_r));
+	m_u_pio2->in_pb_callback().set(m_wdc, FUNC(p8k_wdc_device::status_r));
+	m_u_pio2->out_pb_callback().set(m_wdc, FUNC(p8k_wdc_device::control_w));
+	m_wdc->status_cb().set(m_u_pio2, FUNC(z80pio_device::port_b_write));   // /ST0 = interrupt request
 
-	/* sound hardware */
-	SPEAKER(config, "mono").front_center();
-	BEEP(config, "beeper", 3250).add_route(ALL_OUTPUTS, "mono", 0.5);
+	// 8 bit side of the coupling
+	m_pio0->in_pa_callback().set(FUNC(p8k_state::coupling_pio0_a_r));
+	m_pio0->in_pb_callback().set(FUNC(p8k_state::coupling_pio0_b_r));
+	m_pio0->out_ardy_callback().set(FUNC(p8k_state::coupling_ardy8_w));
 }
 
 /* ROM definition */
-ROM_START( p8000 )
+ROM_START( p8000_8 )
 	ROM_REGION( 0x30000, "maincpu", 0 )
 	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
 	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
@@ -1705,7 +1965,11 @@ ROM_START( p8000 )
 ROM_END
 
 ROM_START( p8000_16 )
-	ROM_REGION16_BE( 0x4000, "maincpu", 0 )
+	ROM_REGION( 0x30000, "maincpu", 0 )
+	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
+	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
+
+	ROM_REGION16_BE( 0x4000, "cpu16", 0 )
 	ROM_LOAD16_BYTE("mon16_1h_3.1_udos",   0x0000, 0x1000, CRC(0c3c28da) SHA1(0cd35444c615b404ebb9cf80da788593e573ddb5))
 	ROM_LOAD16_BYTE("mon16_1l_3.1_udos",   0x0001, 0x1000, CRC(e8857bdc) SHA1(f89c65cbc479101130c71806fd3ddc28e6383f12))
 	ROM_LOAD16_BYTE("mon16_2h_3.1_udos",   0x2000, 0x1000, CRC(cddf58d5) SHA1(588bad8df75b99580459c7a8e898a3396907e3a4))
@@ -1715,6 +1979,10 @@ ROM_START( p8000_16 )
 	ROM_REGION( 0x1000, "chargen", 0 )
 	ROM_LOAD("p8t_zs",    0x0000, 0x0800, CRC(f9321251) SHA1(a6a796b58d50ec4a416f2accc34bd76bc83f18ea))
 	ROM_LOAD("p8tdzs.2",  0x0800, 0x0800, CRC(32736503) SHA1(6a1d7c55dddc64a7d601dfdbf917ce1afaefbb0a))
+
+	ROM_REGION( 0x2000, "user1", 0 )
+	ROM_LOAD( "wdc4.2_1-2c43.bin", 0x0000, 0x1000, CRC(2646f1ee) SHA1(f62574ad57a2c8ac55c5df89256a707c0cafc0eb) )
+	ROM_LOAD( "wdc4.2_2-5d66.bin", 0x1000, 0x1000, CRC(5d496b65) SHA1(42166d7ec51fce086c65ea829d8a3d63088815ca) )
 ROM_END
 
 } // anonymous namespace
@@ -1723,5 +1991,5 @@ ROM_END
 /* Driver */
 
 //    YEAR  NAME      PARENT  COMPAT  MACHINE  INPUT  CLASS      INIT        COMPANY                   FULLNAME               FLAGS
-COMP( 1989, p8000,    0,      0,      p8k,     p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit Board)",  MACHINE_NOT_WORKING)
-COMP( 1989, p8000_16, p8000,  0,      p8k_16,  p8k,   p8k_state, empty_init, "EAW electronic Treptow", "P8000 (16bit Board)", MACHINE_NOT_WORKING)
+COMP( 1989, p8000_8,  0,      0,      p8k,     p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit Board)",  MACHINE_NOT_WORKING)
+COMP( 1989, p8000_16, p8000_8, 0,     p8k_16,  p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", MACHINE_NOT_WORKING)

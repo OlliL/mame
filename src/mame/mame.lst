@@ -44408,7 +44408,7 @@ optomaxv
 orinasp
 
 @source:skeleton/p8k.cpp
-p8000
+p8000_8
 p8000_16
 
 @source:skeleton/paipaile.cpp
