@@ -57,7 +57,6 @@
 #include "imagedev/harddriv.h"
 #include "machine/z80pio.h"
 #include "machine/z8010.h"
-#include "machine/msm6242.h"
 #include "sound/beep.h"
 #include "speaker.h"
 #include "machine/clock.h"
@@ -902,7 +901,6 @@ public:
 		, m_u_pio1(*this, "u_pio1")
 		, m_u_pio2(*this, "u_pio2")
 		, m_wdc(*this, "wdc")
-		, m_rtc(*this, "rtc")
 		, m_i8272(*this, "i8272")
 		, m_ram(*this, "ram", 0x100000, ENDIANNESS_BIG)
 		, m_local_ram(*this, "local_ram", 0x4000, ENDIANNESS_BIG)
@@ -956,8 +954,6 @@ private:
 	void coupling_ardy8_w(int state);   // 8 bit PIO0 A ready: 8 bit side took the data
 	void coupling_update_8bit();
 	void u8000_reset(bool held);
-	uint8_t rtc_r(offs_t offset) { return 0x30 | (m_rtc->read(offset) & 0x0f); }   // D4/D5 are pulled up
-	void rtc_w(offs_t offset, uint8_t data) { m_rtc->write(offset, data & 0x0f); }
 	uint8_t memory_read_byte(offs_t offset);
 	void memory_write_byte(offs_t offset, uint8_t data);
 	uint8_t io_read_byte(offs_t offset);
@@ -1017,7 +1013,6 @@ private:
 	optional_device<z80pio_device> m_u_pio1;      // 16 bit board: coupling PIO (from 8 bit)
 	optional_device<z80pio_device> m_u_pio2;      // 16 bit board: WDC
 	optional_device<p8k_wdc_device> m_wdc;
-	optional_device<msm6242_device> m_rtc;       // clock module (RTC-72421, register compatible)
 	optional_device<i8272a_device> m_i8272;
 
 	// 16-bit board
@@ -1739,7 +1734,6 @@ void p8k_state::p8k_16_iomap(address_map &map)
 	map(0x0ff90, 0x0ff97).rw(FUNC(p8k_state::u_pio0_r), FUNC(p8k_state::u_pio0_w)).umask16(0x00ff);
 	map(0x0ff98, 0x0ff9f).rw(m_u_pio1, FUNC(z80pio_device::read), FUNC(z80pio_device::write)).umask16(0x00ff);
 	map(0x0ffa0, 0x0ffa7).rw(FUNC(p8k_state::pio2_r), FUNC(p8k_state::pio2_w)).umask16(0x00ff);
-	map(0x0fde0, 0x0fdff).rw(FUNC(p8k_state::rtc_r), FUNC(p8k_state::rtc_w)).umask16(0x00ff);   // clock module
 	map(0x0ffa8, 0x0ffaf).rw(m_u_ctc0, FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
 	map(0x0ffb0, 0x0ffb7).rw(m_u_ctc1, FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
 	map(0x0ffc0, 0x0ffc1).rw(FUNC(p8k_state::scr_r), FUNC(p8k_state::scr_w)).umask16(0x00ff);
@@ -1940,9 +1934,6 @@ void p8k_state::p8k_16(machine_config &config)
 
 	Z80PIO(config, m_u_pio2, XTAL(4'000'000));
 	m_u_pio2->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-
-	// clock module (Seiko Epson RTC-72421)
-	MSM6242(config, m_rtc, XTAL(32'768));
 
 	// Winchester controller (software emulation) on PIO2
 	P8K_WDC(config, m_wdc, 0);
