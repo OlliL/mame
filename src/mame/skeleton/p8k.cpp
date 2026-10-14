@@ -98,6 +98,8 @@ public:
 
 	void init_p8k();
 
+	DECLARE_INPUT_CHANGED_MEMBER(nmi_button);
+
 private:
 	uint8_t port0_r(offs_t offset);
 	void port0_w(offs_t offset, uint8_t data);
@@ -276,7 +278,15 @@ static INPUT_PORTS_START( p8k )
 	PORT_DIPNAME( 0x80, 0x00, "Hardware Test")
 	PORT_DIPSETTING(    0x00, DEF_STR(Off))
 	PORT_DIPSETTING(    0x80, DEF_STR(On))
+
+	PORT_START("NMI")
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("NMI") PORT_CODE(KEYCODE_F12) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(p8k_state::nmi_button), 0)
 INPUT_PORTS_END
+
+INPUT_CHANGED_MEMBER(p8k_state::nmi_button)
+{
+	m_maincpu->set_input_line(INPUT_LINE_NMI, newval ? ASSERT_LINE : CLEAR_LINE);
+}
 
 
 MACHINE_RESET_MEMBER(p8k_state,p8k)
@@ -428,9 +438,11 @@ void p8k_state::p8k(machine_config &config)
 	MCFG_MACHINE_RESET_OVERRIDE(p8k_state,p8k)
 
 	/* peripheral hardware */
-	z80dma_device& dma(Z80DMA(config, "dma", 16_MHz_XTAL / 4));
-	dma.out_busreq_callback().set(FUNC(p8k_state::p8k_dma_irq_w));
-	dma.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
+	z80dma_device& dma(UA858D(config, "dma", 16_MHz_XTAL / 4));
+	// DMA BUSREQ drives the Z80 BUSREQ, Z80 BUSACK returns to the DMA's BAI
+	dma.out_busreq_callback().set_inputline(m_maincpu, Z80_INPUT_LINE_BUSREQ);
+	maincpu.busack_cb().set(dma, FUNC(z80dma_device::bai_w));
+	dma.out_int_callback().set(FUNC(p8k_state::p8k_dma_irq_w));
 	dma.in_mreq_callback().set(FUNC(p8k_state::memory_read_byte));
 	dma.out_mreq_callback().set(FUNC(p8k_state::memory_write_byte));
 	dma.in_iorq_callback().set(FUNC(p8k_state::io_read_byte));
@@ -445,12 +457,14 @@ void p8k_state::p8k(machine_config &config)
 	// manual states the callbacks should go to
 	// Baud Gen 3, FDC, System-Kanal
 	ctc0.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
+	ctc0.set_reload_on_reset(true); // required by the monitor's hardware self-test
 
 	z80ctc_device& ctc1(Z80CTC(config, "ctc1", 1229000));    /* 1.22MHz clock */
 	// to implement: callbacks!
 	// manual states the callbacks should go to
 	// Baud Gen 0, Baud Gen 1, Baud Gen 2,
 	ctc1.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
+	ctc1.set_reload_on_reset(true);
 
 	z80sio_device& sio(Z80SIO(config, "sio", 16_MHz_XTAL / 4));
 	sio.out_txdb_callback().set("rs232", FUNC(rs232_port_device::write_txd));

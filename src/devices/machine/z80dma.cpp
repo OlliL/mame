@@ -644,11 +644,11 @@ u8 z80dma_device::read()
 		break;
 
 	case 1:
-		res = m_byte_counter & 0xff; //byte counter (low)
+		res = byte_counter() & 0xff; //byte counter (low)
 		break;
 
 	case 2:
-		res = m_byte_counter >> 8; //byte counter (high)
+		res = byte_counter() >> 8; //byte counter (high)
 		break;
 
 	case 3:
