@@ -201,11 +201,20 @@ kernel asks for the date at boot.
 cascaded and count a 1.2288 MHz oscillator (WEGA programs /256 and /80, i.e.
 60 Hz). It is wired the same way as the System 8000 CPU board does it.
 
-**Serial baud rates:** as on the System 8000 CPU board, the 1.2288 MHz oscillator
-is the trigger input of the CTC channels and their zero count outputs clock the
-SIO channels (CTC0 ch0/1/2 = SIO0 A/SIO0 B/SIO1 A, CTC1 ch0 = SIO1 B). The
-console (SIO0 B) therefore runs at the rate the monitor or WEGA programs
-(time constant 2, x32 = 9600 baud).
+**Serial ports and baud rates:** both boards have two SIOs, so with the 8 bit and
+the 16 bit board there are eight terminal channels (WEGA `sio.h`: tty0-3 on the
+8 bit board, tty4-7 on the 16 bit board; the system console is tty1, SIO0 B of
+the 8 bit board - the 16 bit monitor reaches it through the coupling PIOs, its
+own SIO0 B is only used when the 8 bit part is inactive). Every channel has an
+RS232 port (slot names `tty0`, `rs232` = tty1, `tty2`, `tty3`, `tty4`,
+`u_rs232` = tty5, `tty6`, `tty7`); only the console has a terminal attached by
+default. As in the System 8000 the baud rates come from the CTCs: a baud rate
+oscillator (614.4 kHz) feeds the CTC trigger inputs, and the zero count outputs
+clock the SIO channels (8 bit: CTC1 ch0/1/2 = SIO0 A/B, SIO1 A, CTC0 ch0 =
+SIO1 B; 16 bit: CTC0 ch0/1/2 = SIO0 A/B, SIO1 A, CTC1 ch0 = SIO1 B). With the
+SIO in x32 mode a time constant of 2 gives 9600 baud and the WEGA table
+(`siospeed`) 19200/TC. The 1.2288 MHz oscillator is only used for the real-time
+clock. Tested with the WEGA login on tty0, tty1 and tty4.
 
 ### 2.4 Why the 16 bit board follows the System 8000 CPU board
 
@@ -278,9 +287,9 @@ All of this was run headless with the WEGA SD card image
 
 ## 4. Known limitations
 
-- Only one terminal is exercised: the console on the 8 bit board's serial
-  port. The 16 bit board has an `rs232` port for SIO0 channel B only; the other
-  serial channels are clocked by the CTCs but have no RS232 port attached.
+- Only the console (tty1) has been used interactively; tty0 and tty4 were checked
+  for the login prompt and for output from the shell, the other ports are wired
+  the same way but untested.
 - Floppy access from the 16 bit side (the UDOS/WEGA start floppy path) has not
   been tested, and neither has the 8 bit board's terminal-side keyboard.
 - The WDC formatting and bad-track-table commands have not been tested.

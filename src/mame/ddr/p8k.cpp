@@ -534,7 +534,8 @@ void p8k_state::init_p8k()
 ***************************************************************************/
 
 #define CLK_CPU     XTAL(4'000'000)
-#define CLK_CTC     (2.4576_MHz_XTAL / 2)
+#define CLK_CTC     (2.4576_MHz_XTAL / 2)   // oscillator of the real-time clock
+#define CLK_BAUD    (2.4576_MHz_XTAL / 4)   // baud rate oscillator: ZC pulses of the CTC / 32 = 19200 / time constant
 
 // System Configuration Register control bits 0-3
 #define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
@@ -1222,36 +1223,66 @@ void p8k_state::p8k(machine_config &config)
 	dma.in_iorq_callback().set(FUNC(p8k_state::io_read_byte));
 	dma.out_iorq_callback().set(FUNC(p8k_state::io_write_byte));
 
-	clock_device &uart_clock(CLOCK(config, "uart_clock", 307200));
-	uart_clock.signal_handler().set("sio", FUNC(z80sio_device::txcb_w));
-	uart_clock.signal_handler().append("sio", FUNC(z80sio_device::rxcb_w));
-
 	z80ctc_device& ctc0(Z80CTC(config, "ctc0", 1229000));    /* 1.22MHz clock */
-	// to implement: callbacks!
-	// manual states the callbacks should go to
-	// Baud Gen 3, FDC, System-Kanal
+	// Baud rate generators: the baud rate oscillator is the trigger input of the CTC
+	// channels, their zero count outputs clock the SIO channels (WEGA sio.h):
+	//   CTC1 ch0 = SIO0 A (tty0), ch1 = SIO0 B (tty1, console), ch2 = SIO1 A (tty2)
+	//   CTC0 ch0 = SIO1 B (tty3); CTC0 also has the FDC and the system channel
 	ctc0.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	ctc0.set_reload_on_reset(true); // required by the monitor's hardware self-test
+	ctc0.set_clk<0>(CLK_BAUD);
+	ctc0.zc_callback<0>().set("sio1", FUNC(z80sio_device::rxcb_w));
+	ctc0.zc_callback<0>().append("sio1", FUNC(z80sio_device::txcb_w));
 
 	z80ctc_device& ctc1(Z80CTC(config, "ctc1", 1229000));    /* 1.22MHz clock */
-	// to implement: callbacks!
-	// manual states the callbacks should go to
-	// Baud Gen 0, Baud Gen 1, Baud Gen 2,
 	ctc1.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	ctc1.set_reload_on_reset(true);
+	ctc1.set_clk<0>(CLK_BAUD);
+	ctc1.set_clk<1>(CLK_BAUD);
+	ctc1.set_clk<2>(CLK_BAUD);
+	ctc1.zc_callback<0>().set("sio", FUNC(z80sio_device::rxca_w));
+	ctc1.zc_callback<0>().append("sio", FUNC(z80sio_device::txca_w));
+	ctc1.zc_callback<1>().set("sio", FUNC(z80sio_device::rxcb_w));
+	ctc1.zc_callback<1>().append("sio", FUNC(z80sio_device::txcb_w));
+	ctc1.zc_callback<2>().set("sio1", FUNC(z80sio_device::rxca_w));
+	ctc1.zc_callback<2>().append("sio1", FUNC(z80sio_device::txca_w));
 
 	z80sio_device& sio(Z80SIO(config, "sio", 16_MHz_XTAL / 4));
+	sio.out_txda_callback().set("tty0", FUNC(rs232_port_device::write_txd));
+	sio.out_dtra_callback().set("tty0", FUNC(rs232_port_device::write_dtr));
+	sio.out_rtsa_callback().set("tty0", FUNC(rs232_port_device::write_rts));
 	sio.out_txdb_callback().set("rs232", FUNC(rs232_port_device::write_txd));
 	sio.out_dtrb_callback().set("rs232", FUNC(rs232_port_device::write_dtr));
 	sio.out_rtsb_callback().set("rs232", FUNC(rs232_port_device::write_rts));
 	sio.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
+	rs232_port_device &tty0(RS232_PORT(config, "tty0", default_rs232_devices, nullptr));
+	tty0.rxd_handler().set("sio", FUNC(z80sio_device::rxa_w));
+	tty0.cts_handler().set("sio", FUNC(z80sio_device::ctsa_w));
+	tty0.dcd_handler().set("sio", FUNC(z80sio_device::dcda_w));
+
+	// tty1 is the system console
 	rs232_port_device &rs232(RS232_PORT(config, "rs232", default_rs232_devices, "terminal"));
 	rs232.rxd_handler().set("sio", FUNC(z80sio_device::rxb_w));
 	rs232.cts_handler().set("sio", FUNC(z80sio_device::ctsb_w));
 
 	z80sio_device& sio1(Z80SIO(config, "sio1", 16_MHz_XTAL / 4));
+	sio1.out_txda_callback().set("tty2", FUNC(rs232_port_device::write_txd));
+	sio1.out_dtra_callback().set("tty2", FUNC(rs232_port_device::write_dtr));
+	sio1.out_rtsa_callback().set("tty2", FUNC(rs232_port_device::write_rts));
+	sio1.out_txdb_callback().set("tty3", FUNC(rs232_port_device::write_txd));
+	sio1.out_dtrb_callback().set("tty3", FUNC(rs232_port_device::write_dtr));
+	sio1.out_rtsb_callback().set("tty3", FUNC(rs232_port_device::write_rts));
 	sio1.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
+
+	rs232_port_device &tty2(RS232_PORT(config, "tty2", default_rs232_devices, nullptr));
+	tty2.rxd_handler().set("sio1", FUNC(z80sio_device::rxa_w));
+	tty2.cts_handler().set("sio1", FUNC(z80sio_device::ctsa_w));
+	tty2.dcd_handler().set("sio1", FUNC(z80sio_device::dcda_w));
+	rs232_port_device &tty3(RS232_PORT(config, "tty3", default_rs232_devices, nullptr));
+	tty3.rxd_handler().set("sio1", FUNC(z80sio_device::rxb_w));
+	tty3.cts_handler().set("sio1", FUNC(z80sio_device::ctsb_w));
+	tty3.dcd_handler().set("sio1", FUNC(z80sio_device::dcdb_w));
 
 	Z80PIO(config, m_pio0, 1229000);
 	m_pio0->out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
@@ -1305,14 +1336,14 @@ void p8k_state::p8k_16(machine_config &config)
 	m_daisy->int_cb().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
 	/* peripheral hardware */
-	// Baud rate generators (as on the System 8000 CPU board): the 1.2288 MHz
+	// Baud rate generators (as on the System 8000 CPU board): the baud rate
 	// oscillator is the trigger input of the CTC channels, their zero count
 	// outputs clock the SIO channels.
-	//   CTC0 ch0 = SIO0 A, ch1 = SIO0 B (console), ch2 = SIO1 A, CTC1 ch0 = SIO1 B
+	//   CTC0 ch0 = SIO0 A (tty4), ch1 = SIO0 B (tty5), ch2 = SIO1 A (tty6), CTC1 ch0 = SIO1 B (tty7)
 	Z80CTC(config, m_ctc[0], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-	m_ctc[0]->set_clk<0>(CLK_CTC);
-	m_ctc[0]->set_clk<1>(CLK_CTC);
-	m_ctc[0]->set_clk<2>(CLK_CTC);
+	m_ctc[0]->set_clk<0>(CLK_BAUD);
+	m_ctc[0]->set_clk<1>(CLK_BAUD);
+	m_ctc[0]->set_clk<2>(CLK_BAUD);
 	m_ctc[0]->zc_callback<0>().set(m_sio[0], FUNC(z80sio_device::rxca_w));
 	m_ctc[0]->zc_callback<0>().append(m_sio[0], FUNC(z80sio_device::txca_w));
 	m_ctc[0]->zc_callback<1>().set(m_sio[0], FUNC(z80sio_device::rxcb_w));
@@ -1321,7 +1352,7 @@ void p8k_state::p8k_16(machine_config &config)
 	m_ctc[0]->zc_callback<2>().append(m_sio[1], FUNC(z80sio_device::txca_w));
 
 	Z80CTC(config, m_ctc[1], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-	m_ctc[1]->set_clk<0>(CLK_CTC);
+	m_ctc[1]->set_clk<0>(CLK_BAUD);
 	m_ctc[1]->zc_callback<0>().set(m_sio[1], FUNC(z80sio_device::rxcb_w));
 	m_ctc[1]->zc_callback<0>().append(m_sio[1], FUNC(z80sio_device::txcb_w));
 	m_ctc[1]->zc_callback<2>().set(m_ctc[1], FUNC(z80ctc_device::trg3));
@@ -1335,6 +1366,9 @@ void p8k_state::p8k_16(machine_config &config)
 	rtc_clk.signal_handler().set(m_ctc[1], FUNC(z80ctc_device::trg2));
 
 	Z80SIO(config, m_sio[0], CLK_CPU);
+	m_sio[0]->out_txda_callback().set("tty4", FUNC(rs232_port_device::write_txd));
+	m_sio[0]->out_dtra_callback().set("tty4", FUNC(rs232_port_device::write_dtr));
+	m_sio[0]->out_rtsa_callback().set("tty4", FUNC(rs232_port_device::write_rts));
 	m_sio[0]->out_txdb_callback().set("u_rs232", FUNC(rs232_port_device::write_txd));
 	m_sio[0]->out_dtrb_callback().set("u_rs232", FUNC(rs232_port_device::write_dtr));
 	m_sio[0]->out_rtsb_callback().set("u_rs232", FUNC(rs232_port_device::write_rts));
@@ -1344,7 +1378,29 @@ void p8k_state::p8k_16(machine_config &config)
 	rs232.rxd_handler().set(m_sio[0], FUNC(z80sio_device::rxb_w));
 	rs232.cts_handler().set(m_sio[0], FUNC(z80sio_device::ctsb_w));
 
-	Z80SIO(config, m_sio[1], CLK_CPU).out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	rs232_port_device &tty4(RS232_PORT(config, "tty4", default_rs232_devices, nullptr));
+	tty4.rxd_handler().set(m_sio[0], FUNC(z80sio_device::rxa_w));
+	tty4.cts_handler().set(m_sio[0], FUNC(z80sio_device::ctsa_w));
+	tty4.dcd_handler().set(m_sio[0], FUNC(z80sio_device::dcda_w));
+
+	// tty5 (SIO0 B) is the terminal of the 16 bit monitor when the 8 bit part is inactive
+	Z80SIO(config, m_sio[1], CLK_CPU);
+	m_sio[1]->out_txda_callback().set("tty6", FUNC(rs232_port_device::write_txd));
+	m_sio[1]->out_dtra_callback().set("tty6", FUNC(rs232_port_device::write_dtr));
+	m_sio[1]->out_rtsa_callback().set("tty6", FUNC(rs232_port_device::write_rts));
+	m_sio[1]->out_txdb_callback().set("tty7", FUNC(rs232_port_device::write_txd));
+	m_sio[1]->out_dtrb_callback().set("tty7", FUNC(rs232_port_device::write_dtr));
+	m_sio[1]->out_rtsb_callback().set("tty7", FUNC(rs232_port_device::write_rts));
+	m_sio[1]->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+
+	rs232_port_device &tty6(RS232_PORT(config, "tty6", default_rs232_devices, nullptr));
+	tty6.rxd_handler().set(m_sio[1], FUNC(z80sio_device::rxa_w));
+	tty6.cts_handler().set(m_sio[1], FUNC(z80sio_device::ctsa_w));
+	tty6.dcd_handler().set(m_sio[1], FUNC(z80sio_device::dcda_w));
+	rs232_port_device &tty7(RS232_PORT(config, "tty7", default_rs232_devices, nullptr));
+	tty7.rxd_handler().set(m_sio[1], FUNC(z80sio_device::rxb_w));
+	tty7.cts_handler().set(m_sio[1], FUNC(z80sio_device::ctsb_w));
+	tty7.dcd_handler().set(m_sio[1], FUNC(z80sio_device::dcdb_w));
 
 	// coupling PIOs: PIO0 sends to the 8 bit board, PIO1 receives from it
 	Z80PIO(config, m_u_pio0, CLK_CPU);
