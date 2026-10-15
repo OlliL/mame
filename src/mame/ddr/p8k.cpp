@@ -17,9 +17,11 @@
       * 16 bit board: Index 4 ("V: 4xxx", monitor MON16 3.1). Chapter 7 of the
                       hardware manual.  An 8 bit board Index >= 3 may only be
                       coupled with a 16 bit board Index >= 4.
-      The SBR register (FFC9) exists only on the Index 0 (development, "GLE")
-      board according to the manual; it is kept as a plain register because
-      the MON16 hardware test writes and reads it back.
+      The hardware manual (chapter 6) lists the SBR register (FFC9) only for
+      the Index 0 (development, "GLE") board.  It is nevertheless kept as a
+      plain read/write register: MON16 3.1 tests it unconditionally in its
+      hardware test (error 84 if the read back differs, no check of the board
+      index), later test steps load it, and WEGA writes it.
 
     P8000 8 bit board memory layout (hardware manual 3.3 / 4.3)
       * three memory banks, each switched in steps of 4K:
