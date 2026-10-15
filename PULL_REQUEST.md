@@ -154,9 +154,11 @@ The operating systems are UDOS and WEGA (UNIX like).
 | `p8000_8` | 8 bit board only (formerly `p8000`) |
 | `p8000_16` | 8 bit board + 16 bit board (clone of `p8000_8`) |
 
-The driver is in `src/mame/ddr/p8k.cpp` (it was in `skeleton/`; a manufacturer
+The driver is in `src/mame/ddr/p8k.cpp` together with two P8000 specific
+devices in their own files, `p8k_wdc.h/.cpp` (Winchester disk controller) and
+`p8k_u130.h/.cpp` (clock module). It was in `skeleton/`; a manufacturer
 directory for a single file did not seem right, and `ddr/` is the collection for
-East German hardware). `mame.lst` is updated. Both machines are still flagged
+East German hardware. `mame.lst` is updated. Both machines are still flagged
 `MACHINE_NOT_WORKING` (see the limitations below).
 
 ### 2.3 What is emulated
@@ -179,7 +181,7 @@ holds the 16 bit board in reset. This is what lets the 8 bit monitor start the
 16 bit CPU (`X`) and what carries the 16 bit board's console output to the 8 bit
 board's serial terminal.
 
-**Winchester disk controller:** emulated in software (`p8k_wdc_device`, PIO2 of
+**Winchester disk controller:** emulated in software (`p8k_wdc_device` in `p8k_wdc.cpp`, PIO2 of
 the 16 bit board). Only the protocol visible on the PIO interface is
 implemented: commands, parameter table, bad track table and error codes follow
 the behaviour of Oliver Lehmann's P8000 WDC emulator, which was derived from
@@ -187,7 +189,7 @@ signal captures of a real WDC 4.2. The disk is a `harddisk_image_device`, so it
 is attached with `-hard`. The controller's /ST0 line raises the interrupt used by
 the WEGA disk driver.
 
-**U130 clock module** (16 bit board, I/O ports FEF1 to FEFF): a quartz clock
+**U130 clock module** (`p8k_u130_device` in `p8k_u130.cpp`; 16 bit board, I/O ports FEF1 to FEFF): a quartz clock
 with a six digit seven segment display and two keys that the 16 bit side reads
 digit by digit (see `timer.c` of the WEGA kernel and the standalone program
 `sa.timer`). The emulation returns the UTC time of the host; the correction
@@ -241,8 +243,8 @@ Deliberate differences:
   "RUN16" lamp output on the P8000);
 - `soft_reset_w` resets only the 16 bit board, not the whole machine; the 8 bit
   board keeps running; `nmiack_r` returns just 0xFFFF;
-- WDC, U130 and the PIO coupling are P8000 specific and sit in their own
-  sections of the file.
+- WDC and U130 are P8000 specific devices in their own files
+  (`p8k_wdc`, `p8k_u130`); the PIO coupling sits in its own section of `p8k.cpp`.
 
 The segment trap latches (`TRPL`, `IF1L`) were part of the driver already; the
 system break register (FFC9) was added when the driver was aligned, because the
@@ -294,4 +296,5 @@ All of this was run headless with the WEGA SD card image
 - `p8k: align the 16 bit board with the System 8000 CPU-A board (s8k_cpu.cpp)`
 - `p8k: wire the real-time clock on the 16 bit board, forward the daisy chain state`
 - `z80dma/p8k: keep the UA858D byte counter quirk P8000 specific`
+- `p8k: move the WDC and the U130 clock module into p8k_wdc and p8k_u130 devices`
 - `p8k: move driver from skeleton/ to ddr/`
