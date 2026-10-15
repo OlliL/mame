@@ -39,8 +39,8 @@
 
     P8000_16 : All input must be in uppercase.
 
-    TODO:
-      * Find out how to enter hardware check on 16 bit board
+    16 bit board: the hardware check is entered with the NMI key at the
+    "Press NMI" prompt of the softwaremonitor.
 
 ****************************************************************************/
 
@@ -1481,5 +1481,5 @@ ROM_END
 /* Driver */
 
 //    YEAR  NAME      PARENT  COMPAT  MACHINE  INPUT  CLASS      INIT        COMPANY                   FULLNAME               FLAGS
-COMP( 1989, p8000_8,  0,      0,      p8k,     p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit Board)",  MACHINE_NOT_WORKING)
-COMP( 1989, p8000_16, p8000_8, 0,     p8k_16,  p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", MACHINE_NOT_WORKING)
+COMP( 1989, p8000_8,  0,      0,      p8k,     p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit Board)",  0)
+COMP( 1989, p8000_16, p8000_8, 0,     p8k_16,  p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)

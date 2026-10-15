@@ -215,8 +215,8 @@ The driver is in `src/mame/ddr/p8k.cpp` together with two P8000 specific
 devices in their own files, `p8k_wdc.h/.cpp` (Winchester disk controller) and
 `p8k_u130.h/.cpp` (clock module). It was in `skeleton/`; a manufacturer
 directory for a single file did not seem right, and `ddr/` is the collection for
-East German hardware. `mame.lst` is updated. Both machines are still flagged
-`MACHINE_NOT_WORKING` (see the limitations below).
+East German hardware. `mame.lst` is updated. Both machines are no longer flagged
+`MACHINE_NOT_WORKING` (see the known limitations below).
 
 ### 2.3 What is emulated
 
@@ -416,15 +416,8 @@ U8000 monitor, Return at the primary boot loader (it loads the secondary one), a
 
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
-- Real bad tracks cannot happen with a disk image: a track is only entered into the
-  BTT by hand in `sa.format` (or by a table written by the host), never because a
-  format or read fails.
-- The WDC firmware ROMs and the terminal character generator ROMs were removed from
-  the ROM definitions: the controller is a software emulation that does not
-  execute them, and the terminal is a serial console, so nothing uses them.
 - The U130 clock module is a minimal emulation (host time, set is a no-op).
-- Both machines remain `MACHINE_NOT_WORKING` until the points above are
-  settled.
+- The printer port and the serial ports other than the console were not tested.
 
 ## 5. Commits
 
