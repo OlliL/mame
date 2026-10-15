@@ -10,6 +10,16 @@ The driver needed small changes in three shared Z80 devices (`z80pio`, `z80ctc`,
 
 ## 1. Shared devices
 
+### z8000: DAB fix
+
+`DAB` computed the high-nibble correction from the byte after the +6 low-nibble
+correction. For bytes 0xFA-0xFF that addition overflows and hides the need for
+the 0x60 correction. The high digit is now judged from the original byte after
+an addition. WEGA's C library converts longs to decimal with a BCD loop, so
+before this fix numbers like 16000...16260 and 100000 were printed wrongly
+(`expr 13000 + 3000` returned 0, which made `sysgen` write `md(0,0)wega` as
+default boot path).
+
 ### z80pio: two fixes
 
 Both were needed for the interrupt driven coupling of the two boards and for
