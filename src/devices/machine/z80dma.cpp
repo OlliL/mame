@@ -950,7 +950,12 @@ void z80dma_device::bai_w(int state)
 DEFINE_DEVICE_TYPE(UA858D, ua858d_device, "ua858d", "Mikroelektronik UA858D DMA Controller")
 
 ua858d_device::ua858d_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock)
-	: z80dma_device(mconfig, UA858D, tag, owner, clock)
+	: ua858d_device(mconfig, UA858D, tag, owner, clock)
+{
+}
+
+ua858d_device::ua858d_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock)
+	: z80dma_device(mconfig, type, tag, owner, clock)
 {
 }
 

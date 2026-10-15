@@ -198,8 +198,7 @@ public:
 	virtual void write(u8 data) override;
 
 protected:
-	// the UA858D reads back one less than the number of bytes transferred
-	virtual u16 byte_counter() const override { return m_byte_counter - 1; }
+	ua858d_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock);
 };
 
 

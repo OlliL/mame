@@ -98,6 +98,24 @@ p8k_16_daisy_device::p8k_16_daisy_device(const machine_config &mconfig, const ch
 	, m_int_cb(*this) {}
 
 
+// The DMA controller of the 8 bit board reads back one less than the number of
+// bytes transferred (needed by the monitor's hardware self-test).
+class p8k_dma_device : public ua858d_device
+{
+public:
+	p8k_dma_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+
+protected:
+	virtual u16 byte_counter() const override { return m_byte_counter - 1; }
+};
+
+DEFINE_DEVICE_TYPE(P8K_DMA, p8k_dma_device, "p8k_dma", "P8000 DMA controller")
+
+p8k_dma_device::p8k_dma_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
+	: ua858d_device(mconfig, P8K_DMA, tag, owner, clock)
+{
+}
+
 class p8k_wdc_device;
 DECLARE_DEVICE_TYPE(P8K_WDC, p8k_wdc_device)
 
@@ -2262,7 +2280,7 @@ void p8k_state::p8k(machine_config &config)
 	MCFG_MACHINE_RESET_OVERRIDE(p8k_state,p8k)
 
 	/* peripheral hardware */
-	z80dma_device& dma(UA858D(config, "dma", 16_MHz_XTAL / 4));
+	z80dma_device& dma(P8K_DMA(config, "dma", 16_MHz_XTAL / 4));
 	// DMA BUSREQ drives the Z80 BUSREQ, Z80 BUSACK returns to the DMA's BAI
 	dma.out_busreq_callback().set_inputline(m_maincpu, Z80_INPUT_LINE_BUSREQ);
 	maincpu.busack_cb().set(dma, FUNC(z80dma_device::bai_w));
