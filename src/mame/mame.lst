@@ -18225,6 +18225,10 @@ mc8030
 @source:ddr/nanos.cpp
 nanos
 
+@source:ddr/p8k.cpp
+p8000_8
+p8000_16
+
 @source:ddr/pcm.cpp
 pcm
 
@@ -18723,10 +18727,6 @@ twins
 twinsa
 twinsed1
 twinsed2
-
-@source:eaw/p8k.cpp
-p8000_8
-p8000_16
 
 @source:efo/cedar_magnet.cpp
 cedmag
