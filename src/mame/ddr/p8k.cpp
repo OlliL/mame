@@ -21,8 +21,8 @@
                    the quartz clock module U130 (p8k_u130) sits in the 16 bit
                    board's I/O space.
                    Operating systems: OS/M (a CP/M clone) and UDOS (a Z80-RIO
-                   clone) run on the 8 bit board; WEGA (UNIX like) runs on the
-                   16 bit board only.
+                   clone) run on the 8 bit board; WEGA (a Zilog ZEUS clone,
+                   System III UNIX) runs on the 16 bit board only.
 
     Emulated board revisions (P8000 Hardwarehandbuch, version marking "V: ...")
       * 8 bit board:  Index 3 ("V: x3xx", monitor MON8 3.1). Chapter 4 of the
