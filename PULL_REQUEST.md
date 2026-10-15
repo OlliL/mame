@@ -348,6 +348,11 @@ the FDC data register. The DMA reads and writes it with DACK, which is
   WEGA file system floppy (`wgaend22.cqm`) mounts with `/etc/mount` and lists.
   The change was done through the image device (`-flop2`/File Manager/Lua);
   WEGA needs the disk in the drive when the device is opened.
+- Writing works too: `tar cvf /dev/rfd196ds9 ...` followed by `tar tvf`/`tar xf`
+  and `cmp` gives identical files, and files copied to the mounted WEGA floppy
+  are intact after `umount` and a new `mount` (free blocks 169 -> 167). MAME
+  cannot save CopyQM images, so a write only lasts until the image is unloaded;
+  use a format MAME can write (e.g. `.mfi`) to keep the result.
 - A non-UDOS disk in drive 2 at boot makes UDOS stop with "DISK INITIALIZATION
   ERROR C4"; insert such disks after the boot.
 
@@ -355,7 +360,7 @@ the FDC data register. The DMA reads and writes it with DACK, which is
 
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
-- Formatting floppies and writing to them under WEGA has not been tested.
+- Formatting floppies under WEGA has not been tested.
 - The WDC formatting and bad-track-table commands have not been tested.
 - The WDC firmware ROMs and the terminal character generator ROMs were removed from
   the ROM definitions: the controller is a software emulation that does not
