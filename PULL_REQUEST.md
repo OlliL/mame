@@ -277,3 +277,21 @@ systems, which checks the block mapping around a bad track.
 - The clock module is minimal (host time, setting the clock does nothing).
 - Only the console has a terminal; the other ports were tested with login
   prompts and output. The real P8000 has no parallel printer port.
+
+## 5. Sources
+
+A lot of the work rests on material Oliver Lehmann collected and published or
+drew himself, which is what made it possible to check the emulation against the
+real thing:
+
+- the schematic of the 16 bit board (drawn from the real board) and the
+  schematic of the U130 clock module; both may contain mistakes, and the "GLE"
+  parts of the 16 bit schematic are only on development boards;
+- the P8000 hardware manual and the UDOS system manual;
+- the firmware sources (MON8, MON16 and the WDC), <https://github.com/OlliL/P8000>;
+- the WEGA kernel and driver sources and the standalone programs (`sa.format`,
+  `sa.verify`, `sa.timer`, ...) in the same repository;
+- the WDC hardware emulator with its firmware sources and the signal captures
+  of a real WDC, <https://github.com/OlliL/P8000_WDC_Emulator>.
+
+The Z80 CTC, PIO and DMA references are named where they are used in section 1.
