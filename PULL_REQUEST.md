@@ -331,12 +331,32 @@ All of this was run headless with the WEGA SD card image
   WEGA's getty configures the console for an ADM-31 (7 bit even parity), and
   the terminal does not strip bit 7. That is correct, not an emulation error.
 
+### Floppy drives
+
+The two drives are 5.25" double sided, double density, 96 tpi (hardware manual,
+section 3.1), so they are `FLOPPY_525_QD`. Three connections were missing and
+made every disk access fail with "DISK ERROR": the drive motors (PIO2 port A
+bits 0-3, /LCK0-3, low = on), the FDC interrupt (PIO2 B4) and the DMA access to
+the FDC data register. The DMA reads and writes it with DACK, which is
+`i8272a_device::dma_r/dma_w`; the CPU's FIFO access returns 0xFF in DMA mode.
+
+- U880 monitor: Return boots the WEGA start floppy (`-flop1 w31start.cqm`, a
+  UDOS disk with 16 x 256 byte MFM sectors). It starts the coupling software,
+  the U8000 monitor and, after NMI, the WEGA boot from the SD image.
+- Under WEGA a disk can be changed at run time (`/dev/rfd196ds9` is drive 2,
+  720K): `tar tvf` and `tar xf` of a TAR floppy (`vsh.cqm`, 78 files) work, and a
+  WEGA file system floppy (`wgaend22.cqm`) mounts with `/etc/mount` and lists.
+  The change was done through the image device (`-flop2`/File Manager/Lua);
+  WEGA needs the disk in the drive when the device is opened.
+- A non-UDOS disk in drive 2 at boot makes UDOS stop with "DISK INITIALIZATION
+  ERROR C4"; insert such disks after the boot.
+
 ## 4. Known limitations
 
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
-- Floppy access from the 16 bit side (the UDOS/WEGA start floppy path) has not
-  been tested, and neither has the 8 bit board's terminal-side keyboard.
+- Formatting floppies and writing to them under WEGA has not been tested; the
+  8 bit board's terminal-side keyboard has not been tested either.
 - The WDC formatting and bad-track-table commands have not been tested.
 - The WDC firmware ROMs and the terminal character generator ROMs were removed from
   the ROM definitions: the controller is a software emulation that does not
