@@ -294,4 +294,11 @@ what made it possible to check the emulation against the real thing:
 - my WDC hardware emulator with its firmware sources and the signal captures of
   a real WDC, <https://github.com/OlliL/P8000_WDC_Emulator>.
 
-The Z80 CTC, PIO and DMA references are named where they are used in section 1.
+Chip documents used for section 1:
+
+- Z80 PIO Product Specification, <https://z80.mirrors.tinycomputers.io/zip/z80piomn.pdf>
+- Z80 Family Interrupt Structure, <https://z80.mirrors.tinycomputers.io/1653.htm>
+- Z80 CTC Product Specification, <https://bitsavers.mirrorservice.org/components/zilog/z80/Z80_CTC_Product_Specification_Feb80.pdf>
+- Z80 DMA Product Specification, <https://bitsavers.mirrorservice.org/components/zilog/z80/Z80_DMA_Product_Specification_Feb80.pdf>
+- U857D (CTC) technical description, VEB Funkwerk Erfurt, <https://www.tiffe.de/robotron/Bausteinuebersicht/U857D-CTC.pdf>
+- U858D (DMA) technical description, VEB Funkwerk Erfurt, <https://www.tiffe.de/robotron/Bausteinuebersicht/U858D-DMA.pdf>
