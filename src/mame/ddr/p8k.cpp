@@ -989,6 +989,15 @@ private:
 		}
 	}
 	void board16_reset();
+
+	// U130 clock module (16 bit board, ports FEF1-FEFF)
+	uint8_t u130_r(offs_t offset);
+	void u130_w(offs_t offset, uint8_t data);
+	void u130_reset();
+	void u130_sync();
+	void u130_start_field(int index);
+	void u130_display(uint8_t *digits, bool &date);
+
 	uint8_t mmu_cmd_r(offs_t offset);
 	void mmu_cmd_w(offs_t offset, uint8_t data);
 	void invalidate16();
@@ -1040,6 +1049,17 @@ private:
 	uint8_t m_if1_low = 0;
 	bool m_normal_mode = false;
 	bool m_segt_state = false;
+
+	// U130 clock module
+	enum { U130_RUN, U130_DATE_CORR, U130_TIME_SET };
+	uint8_t m_u130_state = U130_RUN;
+	bool m_u130_date = false;         // display shows the date
+	uint8_t m_u130_buttons = 0;       // last value written to FEF1 (bit 0 = key 1, bit 1 = key 2)
+	int m_u130_step = 0;              // number of key 1 presses during a correction
+	int m_u130_live = -1;             // field that is currently counting up
+	int m_u130_start = 0;             // value of that field when it started
+	attotime m_u130_stamp;            // time at which it started
+	int m_u130_v[5] = { 0, 0, 0, 0, 0 };   // values shown during a correction
 };
 
 /***************************************************************************
@@ -1214,6 +1234,8 @@ INPUT_CHANGED_MEMBER(p8k_state::nmi_button)
 
 MACHINE_RESET_MEMBER(p8k_state,p8k)
 {
+	u130_reset();
+
 	if (m_cpu16)
 		board16_reset();
 
@@ -1283,6 +1305,14 @@ void p8k_state::machine_start()
 		save_item(NAME(m_if1_low));
 		save_item(NAME(m_normal_mode));
 		save_item(NAME(m_segt_state));
+		save_item(NAME(m_u130_state));
+		save_item(NAME(m_u130_date));
+		save_item(NAME(m_u130_buttons));
+		save_item(NAME(m_u130_step));
+		save_item(NAME(m_u130_live));
+		save_item(NAME(m_u130_start));
+		save_item(NAME(m_u130_stamp));
+		save_item(NAME(m_u130_v));
 	}
 }
 
@@ -1513,6 +1543,228 @@ void p8k_state::mmu_cmd_w(offs_t offset, uint8_t data)
 	}
 }
 
+/***************************************************************************
+
+    U130 clock module
+
+    The module is a quartz clock with a six digit seven segment display and
+    two keys. The 16 bit board reads the display digits and presses the keys
+    (see timer.c of the kernel and sa.timer.c):
+
+      FEF1 read   0xBF = module present
+      FEF1 write  bit 0 = key 1, bit 1 = key 2
+      FEF5..FEFF  digits 1-6 (FEF5 = rightmost). Bits 0-4 = segments, bit 7 of
+                  the sixth digit = clock pulse, bit 3 of the sixth digit is
+                  set while the date is shown (the module shows hh:mm:ss or
+                  mm.dd.yy)
+
+    Key 2 toggles between time and date. Setting the clock (sa.timer) is done
+    by counting up one field after the other until the software sees the
+    value it wants; it is then taken over with key 1.
+
+    In this emulation the display shows the UTC time of the host. The
+    correction sequence is accepted and shows the counting fields, but the
+    result is discarded when the correction ends (setting the clock is a nop).
+
+***************************************************************************/
+
+void p8k_state::u130_reset()
+{
+	m_u130_state = U130_RUN;
+	m_u130_date = false;
+	m_u130_buttons = 0;
+	m_u130_step = 0;
+	m_u130_live = -1;
+}
+
+// the field that counts up while it is being corrected
+void p8k_state::u130_sync()
+{
+	if (m_u130_live < 0)
+		return;
+
+	static const int date_range[5] = { 12, 4, 10, 10, 10 };
+	static const int date_base[5] = { 1, 0, 0, 0, 0 };
+	static const int time_range[3] = { 24, 6, 10 };
+
+	int const range = (m_u130_state == U130_DATE_CORR) ? date_range[m_u130_live] : time_range[m_u130_live];
+	int const base = (m_u130_state == U130_DATE_CORR) ? date_base[m_u130_live] : 0;
+	// the field counts up four times per second
+	int64_t const n = int64_t((machine().time() - m_u130_stamp).as_double() * 4.0);
+	m_u130_v[m_u130_live] = base + int((m_u130_start - base + n) % range);
+}
+
+void p8k_state::u130_start_field(int index)
+{
+	m_u130_live = index;
+	m_u130_start = m_u130_v[index];
+	m_u130_stamp = machine().time();
+}
+
+void p8k_state::u130_display(uint8_t *digits, bool &date)
+{
+	u130_sync();
+
+	int d[6]; // digit values, rightmost first
+	system_time st;
+	machine().current_datetime(st);
+	system_time::full_time const &t = st.utc_time;
+
+	if (m_u130_state == U130_DATE_CORR)
+	{
+		date = true;
+		d[0] = m_u130_v[4];
+		d[1] = m_u130_v[3];
+		d[2] = m_u130_v[2];
+		d[3] = m_u130_v[1];
+		d[4] = m_u130_v[0] % 10;
+		d[5] = m_u130_v[0] / 10;
+	}
+	else if (m_u130_state == U130_TIME_SET)
+	{
+		date = false;
+		d[0] = m_u130_v[3] % 10;
+		d[1] = m_u130_v[3] / 10;
+		d[2] = m_u130_v[2];
+		d[3] = m_u130_v[1];
+		d[4] = m_u130_v[0] % 10;
+		d[5] = m_u130_v[0] / 10;
+	}
+	else if (m_u130_date)
+	{
+		date = true;
+		int const year = t.year % 100;
+		d[0] = year % 10;
+		d[1] = year / 10;
+		d[2] = t.mday % 10;
+		d[3] = t.mday / 10;
+		d[4] = (t.month + 1) % 10;
+		d[5] = (t.month + 1) / 10;
+	}
+	else
+	{
+		date = false;
+		d[0] = t.second % 10;
+		d[1] = t.second / 10;
+		d[2] = t.minute % 10;
+		d[3] = t.minute / 10;
+		d[4] = t.hour % 10;
+		d[5] = t.hour / 10;
+	}
+
+	static const uint8_t seg7[10] = { 0x0f, 0x02, 0x17, 0x13, 0x1a, 0x19, 0x1d, 0x03, 0x1f, 0x1b };
+	for (int i = 0; i < 5; i++)
+		digits[i] = seg7[d[i]];
+
+	// the sixth digit is only 0-2: blank for 0, and only three segment bits are connected
+	static const uint8_t seg7_6[3] = { 0x00, 0x02, 0x05 };
+	digits[5] = seg7_6[d[5] % 3] | 0x80 | (date ? 0x08 : 0x00);
+}
+
+uint8_t p8k_state::u130_r(offs_t offset)
+{
+	if (offset == 0)
+		return 0xbf;
+	if (offset < 2)
+		return 0xff;
+
+	uint8_t digits[6];
+	bool date;
+	u130_display(digits, date);
+	return digits[offset - 2];
+}
+
+void p8k_state::u130_w(offs_t offset, uint8_t data)
+{
+	if (offset != 0)
+		return;
+
+	data &= 3;
+	uint8_t const rising = data & ~m_u130_buttons;
+	m_u130_buttons = data;
+
+	if (BIT(rising, 1))
+	{
+		// key 2
+		switch (m_u130_state)
+		{
+		case U130_RUN:
+			m_u130_date = !m_u130_date;
+			break;
+
+		case U130_DATE_CORR:
+			// end of the correction, the new date is dropped
+			m_u130_state = U130_RUN;
+			m_u130_date = false;
+			m_u130_live = -1;
+			break;
+
+		case U130_TIME_SET:
+			m_u130_v[3] = 0; // seconds to zero
+			break;
+		}
+	}
+
+	if (BIT(rising, 0))
+	{
+		// key 1
+		system_time st;
+		machine().current_datetime(st);
+		system_time::full_time const &t = st.utc_time;
+
+		switch (m_u130_state)
+		{
+		case U130_RUN:
+			if (m_u130_date && BIT(data, 1))
+			{
+				// both keys: correct the date, starting with the month
+				m_u130_state = U130_DATE_CORR;
+				m_u130_step = 0;
+				m_u130_v[0] = t.month + 1;
+				m_u130_v[1] = t.mday / 10;
+				m_u130_v[2] = t.mday % 10;
+				m_u130_v[3] = (t.year % 100) / 10;
+				m_u130_v[4] = t.year % 10;
+				u130_start_field(0);
+			}
+			else if (!m_u130_date && !BIT(data, 1))
+			{
+				// stop the clock
+				m_u130_state = U130_TIME_SET;
+				m_u130_step = 0;
+				m_u130_live = -1;
+				m_u130_v[0] = t.hour;
+				m_u130_v[1] = t.minute / 10;
+				m_u130_v[2] = t.minute % 10;
+				m_u130_v[3] = t.second;
+			}
+			break;
+
+		case U130_DATE_CORR:
+			// next field: day tens, day units, year tens, year units
+			u130_sync();
+			m_u130_live = -1;
+			if (++m_u130_step < 5)
+				u130_start_field(m_u130_step);
+			break;
+
+		case U130_TIME_SET:
+			// 1: -, 2: hours, 3: minutes tens, 4: minutes units, 5: stop, 6: start the clock
+			u130_sync();
+			m_u130_live = -1;
+			m_u130_step++;
+			if (m_u130_step >= 2 && m_u130_step <= 4)
+				u130_start_field(m_u130_step - 2);
+			else if (m_u130_step >= 6)
+			{
+				m_u130_state = U130_RUN;
+				m_u130_date = false;
+			}
+			break;
+		}
+	}
+}
+
 void p8k_state::p8k_16_sio_map(address_map &map)
 {
 	map.unmap_value_high();
@@ -1728,7 +1980,7 @@ void p8k_state::pio2_w(offs_t offset, uint8_t data)
 
 void p8k_state::p8k_16_iomap(address_map &map)
 {
-//  map(0x0fef0, 0x0feff) // clock
+	map(0x0fef0, 0x0fefe + 1).rw(FUNC(p8k_state::u130_r), FUNC(p8k_state::u130_w)).umask16(0x00ff);   // U130 clock module
 	map(0x0ff80, 0x0ff87).rw(m_u_sio0, FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
 	map(0x0ff88, 0x0ff8f).rw(m_u_sio1, FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
 	map(0x0ff90, 0x0ff97).rw(FUNC(p8k_state::u_pio0_r), FUNC(p8k_state::u_pio0_w)).umask16(0x00ff);
