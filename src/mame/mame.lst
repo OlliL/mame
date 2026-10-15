@@ -18226,7 +18226,7 @@ mc8030
 nanos
 
 @source:ddr/p8k.cpp
-p8000_8
+p8000
 p8000_16
 
 @source:ddr/pcm.cpp

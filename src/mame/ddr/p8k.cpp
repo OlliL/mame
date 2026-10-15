@@ -14,7 +14,7 @@
         8 bit board P8000/8.1, Ms 889 254-2, with parts list and layout)
 
     Machines
-      * p8000_8  : 8 bit board (U880 = Z80) with monitor MON8 3.1 "NUR8BIT"
+      * p8000  : 8 bit board (U880 = Z80) with monitor MON8 3.1 "NUR8BIT"
                    (separate EPROMs, no attempt to start a 16 bit board)
       * p8000_16 : 8 bit board plus 16 bit board (U8001 = Z8001, three
                    U8010 = Z8010 MMUs, monitor MON16).  The boards are coupled
@@ -78,7 +78,7 @@
       * Power on: the 8 bit monitor MON8 runs its self test (only after a
         power-on reset: PIO2 port A bit 7 = 1, see the DSW input), prints
         "Press RETURN" and then the prompt ">".  RETURN boots the floppy disk
-        (on p8000_16 the boot floppy starts the 16 bit side; on p8000_8 a UDOS
+        (on p8000_16 the boot floppy starts the 16 bit side; on p8000 a UDOS
         system floppy runs on the Z80 alone).
       * p8000_16 : the 16 bit software monitor asks "Press NMI"; the NMI key
         (F12) starts the 16 bit hardware check, after which the system boots
@@ -1632,7 +1632,7 @@ void p8k_state::p8k_16(machine_config &config)
 }
 
 /* ROM definition */
-ROM_START( p8000_8 )
+ROM_START( p8000 )
 	// monitor MON8 3.1 for the 8 bit board alone: it does not try to talk to a 16 bit board
 	ROM_REGION( 0x2000, "maincpu", 0 )
 	ROM_LOAD("mon8_1_3.1_nur8bit",  0x0000, 0x1000, CRC(a8e97c26) SHA1(ff98f97308e5d6bea002600a8c0703642abbf0d8))
@@ -1658,5 +1658,5 @@ ROM_END
 /* Driver */
 
 //    YEAR  NAME      PARENT  COMPAT  MACHINE  INPUT  CLASS      INIT        COMPANY                   FULLNAME               FLAGS
-COMP( 1989, p8000_8,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)",  0)
-COMP( 1989, p8000_16, p8000_8, 0,     p8k_16,  p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)
+COMP( 1989, p8000,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)",  0)
+COMP( 1989, p8000_16, p8000, 0,     p8k_16,  p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)

@@ -101,8 +101,8 @@ controller hangs on a PIO of the 16 bit board. OS/M (CP/M like) and UDOS (a
 Z80-RIO clone) run on the 8 bit board, WEGA (a Zilog ZEUS clone, System III
 UNIX) on the 16 bit board.
 
-There are two machines: `p8000_8` (8 bit board only, formerly `p8000`) and
-`p8000_16` (both boards, clone of `p8000_8`). Besides `p8k.cpp` there are
+There are two machines: `p8000` (8 bit board only) and
+`p8000_16` (both boards, clone of `p8000`). Besides `p8k.cpp` there are
 `p8k_wdc.cpp/.h` (Winchester controller) and `p8k_u130.cpp/.h` (clock module).
 `mame.lst` is updated and `MACHINE_NOT_WORKING` is gone.
 
@@ -135,10 +135,10 @@ CTC trigger, and the interrupt priority chain is DMA, PIO2, CTC0, SIO0, SIO1,
 PIO0, PIO1, CTC1. This is only the part of the schematic I traced; the floppy
 controller section was not compared in detail.
 
-`p8000_8` uses its own monitor EPROMs (`mon8_1_3.1_nur8bit`,
+`p8000` uses its own monitor EPROMs (`mon8_1_3.1_nur8bit`,
 `mon8_2_3.1_nur8bit`), because the normal ones try to start a 16 bit board that
 isn't there. `p8000_16` keeps `mon8_1_3.1` and `mon8_2_3.1`. A UDOS system floppy
-boots on `p8000_8` to the `%` prompt, and `STATUS`, `DATE`, `ECHO` and `CAT P=&`
+boots on `p8000` to the `%` prompt, and `STATUS`, `DATE`, `ECHO` and `CAT P=&`
 work. A plain `CAT` prints `FILE NOT FOUND` on that floppy because it only lists
 non-secret files and every file on it has the S property.
 
@@ -250,7 +250,7 @@ channel is a terminal and which a modem line is a software setting
 Everything was run headless with the WEGA SD card image (`-hard sd.hd -rs232
 null_modem`).
 
-- `p8000_8`: the hardware test runs through without an error.
+- `p8000`: the hardware test runs through without an error.
 - `p8000_16`: `X` at the 8 bit monitor starts the U8001, NMI starts the 16 bit
   hardware test, and the monitor boots WEGA (`md(0,16000)wega`).
 - WEGA 3.2 (stock kernel) boots to multi-user mode, the date comes from the
