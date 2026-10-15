@@ -18724,6 +18724,10 @@ twinsa
 twinsed1
 twinsed2
 
+@source:eaw/p8k.cpp
+p8000_8
+p8000_16
+
 @source:efo/cedar_magnet.cpp
 cedmag
 mag_boob
@@ -44406,10 +44410,6 @@ optomaxv
 
 @source:skeleton/orina_stylish_plus.cpp
 orinasp
-
-@source:skeleton/p8k.cpp
-p8000_8
-p8000_16
 
 @source:skeleton/paipaile.cpp
 paipail3
