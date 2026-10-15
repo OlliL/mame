@@ -300,7 +300,7 @@ Deliberate differences:
   of the CPU-A board;
 - the P8000's operating system is always segmented, so only the segmented-OS
   branch of the MMU selection exists (`m_is_seg_os` is constant);
-- no parity/ECC NMI, no DMA mode, no segment violation register (FFD9 is the
+- no parity/ECC NMI (the P8000 has no parity or ECC memory), no DMA mode, no segment violation register (FFD9 is the
   "RUN16" lamp output on the P8000);
 - `soft_reset_w` resets only the 16 bit board, not the whole machine; the 8 bit
   board keeps running; `nmiack_r` returns just 0xFFFF;
@@ -355,13 +355,11 @@ the FDC data register. The DMA reads and writes it with DACK, which is
 
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
-- Formatting floppies and writing to them under WEGA has not been tested; the
-  8 bit board's terminal-side keyboard has not been tested either.
+- Formatting floppies and writing to them under WEGA has not been tested.
 - The WDC formatting and bad-track-table commands have not been tested.
 - The WDC firmware ROMs and the terminal character generator ROMs were removed from
   the ROM definitions: the controller is a software emulation that does not
   execute them, and the terminal is a serial console, so nothing uses them.
-- Parity and ECC are not emulated.
 - The U130 clock module is a minimal emulation (host time, set is a no-op).
 - Both machines remain `MACHINE_NOT_WORKING` until the points above are
   settled.
