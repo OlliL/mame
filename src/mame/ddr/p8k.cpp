@@ -40,7 +40,6 @@
     P8000_16 : All input must be in uppercase.
 
     TODO:
-      * properly implement Z80 daisy chain in 16 bit board
       * Find out how to enter hardware check on 16 bit board
 
 ****************************************************************************/
@@ -73,16 +72,30 @@ public:
 		device_z80daisy_interface *intf = daisy_get_irq_device();
 		return intf ? intf->z80daisy_irq_ack() : 0;
 	}
-	void reti_w(uint8_t data) { if(data == 0x4d) daisy_call_reti_device(); }
+	int update_irq_state() { return daisy_update_irq_state(); }
+	auto int_cb() { return m_int_cb.bind(); }
+	void reti_w(uint8_t data)
+	{
+		if (data == 0x4d)
+		{
+			// writes of ED,4D emulate Z80 RETI, which changes the daisy chain
+			// state and may expose a lower priority request: update the VI line
+			daisy_call_reti_device();
+			m_int_cb(CLEAR_LINE);
+		}
+	}
 protected:
 	void device_start() override {}
+private:
+	devcb_write_line m_int_cb;
 };
 
 DEFINE_DEVICE_TYPE(P8K_16_DAISY, p8k_16_daisy_device, "p8k_16_daisy", "P8000 16-bit daisy chain device")
 
 p8k_16_daisy_device::p8k_16_daisy_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, P8K_16_DAISY, tag, owner, clock)
-	, z80_daisy_chain_interface(mconfig, *this) {}
+	, z80_daisy_chain_interface(mconfig, *this)
+	, m_int_cb(*this) {}
 
 
 class p8k_wdc_device;
@@ -1317,6 +1330,7 @@ void p8k_state::init_p8k()
 ***************************************************************************/
 
 #define CLK_CPU     XTAL(4'000'000)
+#define CLK_CTC     (2.4576_MHz_XTAL / 2)
 
 // System Configuration Register control bits 0-3
 #define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
@@ -1409,7 +1423,11 @@ void p8k_state::mmu_instruction_end()
 uint16_t p8k_state::viack_r()
 {
 	mmu_instruction_end();
-	return m_daisy->viack_r();
+	uint16_t vec = m_daisy->viack_r();
+	// The ack changed the acked device's daisy state (INT -> IEO), so the VI
+	// request line must be re-evaluated
+	p8k_16_daisy_interrupt(CLEAR_LINE);
+	return vec;
 }
 
 uint16_t p8k_state::nviack_r()
@@ -2185,7 +2203,8 @@ void p8k_state::addrmap_io(address_map &map)
 
 void p8k_state::p8k_16_daisy_interrupt(int state)
 {
-	m_cpu16->set_input_line(z8001_device::VI_LINE, state ? ASSERT_LINE : CLEAR_LINE);
+	// Ignore the sent device state and forward the daisy chain state instead
+	m_cpu16->set_input_line(z8001_device::VI_LINE, m_daisy->update_irq_state() ? ASSERT_LINE : CLEAR_LINE);
 }
 
 
@@ -2333,6 +2352,7 @@ void p8k_state::p8k_16(machine_config &config)
 
 	P8K_16_DAISY(config, m_daisy);
 	m_daisy->set_daisy_config(p8k_16_daisy_chain);
+	m_daisy->int_cb().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
 	clock_device &uart_clock(CLOCK(config, "u_uart_clock", 307200));
 	uart_clock.signal_handler().set(m_sio[0], FUNC(z80sio_device::txcb_w));
@@ -2341,6 +2361,15 @@ void p8k_state::p8k_16(machine_config &config)
 	/* peripheral hardware */
 	Z80CTC(config, m_ctc[0], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 	Z80CTC(config, m_ctc[1], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	m_ctc[1]->zc_callback<2>().set(m_ctc[1], FUNC(z80ctc_device::trg3));
+
+	// Real-time (line) clock: CTC 1 channels 2 & 3 are cascaded and run in
+	// COUNTER mode, counting the oscillator fed to the CTC trigger input.
+	// WEGA programs ch2 /256 and ch3 /80 (event.s) -> a 60 Hz jiffy interrupt.
+	// Feed ch2 only through trg2: configuring both its internal clock and this
+	// external trigger would count the oscillator twice.
+	clock_device &rtc_clk(CLOCK(config, "rtc_clk", CLK_CTC));
+	rtc_clk.signal_handler().set(m_ctc[1], FUNC(z80ctc_device::trg2));
 
 	Z80SIO(config, m_sio[0], CLK_CPU);
 	m_sio[0]->out_txdb_callback().set("u_rs232", FUNC(rs232_port_device::write_txd));
