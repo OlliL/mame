@@ -132,8 +132,14 @@ chips are what the memory model assumes (2 x 2732, 4 x 2114, 8 x 2164), the
 baud rate CTC channels clock the SIO channels through divide by two flip-flops as
 in `baud_w()`, the 9.8304 MHz baud quartz divided by eight gives the 1.2288 MHz
 CTC trigger, and the interrupt priority chain is DMA, PIO2, CTC0, SIO0, SIO1,
-PIO0, PIO1, CTC1. This is only the part of the schematic I traced; the floppy
-controller section was not compared in detail.
+PIO0, PIO1, CTC1. I also went through the floppy controller wiring. PIO2 port A
+bit 4 (4 or 8 MHz clock, i.e. 250 or 500 kbit/s), bit 6 (TC, ORed with the DMA
+interrupt) and port B bit 7 (FDC reset) are now connected; drives 0 and 1 are
+modelled. Not modelled: head load (PA5, the drives have no head load magnet),
+the write precompensation outputs (PB5/PB6), a separate drive select (the FDC
+unit select lines decide), drives 2 and 3 and 8" drives. Input PA7 is the reset
+state (high after power-on, low after operator reset); a DIP switch stands in
+for it.
 
 `p8000` uses its own monitor EPROMs (`mon8_1_3.1_nur8bit`,
 `mon8_2_3.1_nur8bit`), because the normal ones try to start a 16 bit board that

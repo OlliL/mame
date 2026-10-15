@@ -62,6 +62,20 @@
         flip-flop that clocks one SIO channel (SIO0 A/B, SIO1 A, SIO1 B).
       * Interrupt priority chain: DMA, PIO2, CTC0, SIO0, SIO1, PIO0 (coupling),
         PIO1 (X3 parallel port), CTC1.
+      * Floppy controller (i8272a, external data separator, DMA driven),
+        PIO2 pin assignment as used by the firmware (FDINIT.S):
+        - port A 0-3 motor on /LCK0-3 (drives 0 and 1 are modelled)
+        - A4 clock T: 1 = 4 MHz / 250 kbit/s (5.25"), 0 = 8 MHz / 500 kbit/s (8")
+        - A5 head load (no effect, the drives have no head load solenoid)
+        - A6 TC, ORed with the inverted DMA interrupt (gates 1D2/7D4)
+        - A7 input RESI: high after power-on reset, low after operator reset
+          (manual 3.2.2); the monitor takes the warm start path on low.  The
+          "Hardware Test" DIP switch stands in for it.
+        - port B 0-3 select /DS0-3 (the FDC US lines decide here, the drive
+          select is not modelled separately), B4 input FDC INT (also reaches
+          the CPU through the DMA chain buffer 2D3), B5/B6 write
+          precompensation (not modelled), B7 reset FDC (RFDC)
+        Drives 2 and 3 and 8" drives are not present.
 
     16 bit board memory: 16 KiB EPROM (0000-3FFF) and 2 KiB static RAM
     (4000-47FF, mirrored up to 5FFF) of segment 0 while the on-board memory is
@@ -224,6 +238,7 @@ private:
 
 	void fdc_irq(int state);
 	void fdc_motor_w(uint8_t data);
+	void fdc_reset_w(uint8_t data);
 	void p8k_daisy_interrupt(int state);
 	void p8k_dma_irq_w(int state);
 	void p8k_16_daisy_interrupt(int state);
@@ -334,6 +349,8 @@ private:
 	optional_device<p8k_wdc_device> m_wdc;
 	optional_device<p8k_u130_device> m_u130;
 	optional_device<i8272a_device> m_i8272;
+	bool m_dma_int = false;
+	bool m_fdc_tc = false;
 
 	// 16-bit board
 	memory_share_creator<uint16_t> m_ram;         // external memory, 1 MiB
@@ -506,7 +523,8 @@ void p8k_state::p8k_daisy_interrupt(int state)
 
 void p8k_state::p8k_dma_irq_w(int state)
 {
-	m_i8272->tc_w(state);
+	m_dma_int = state;
+	m_i8272->tc_w(m_dma_int || m_fdc_tc);
 	p8k_daisy_interrupt(state);
 }
 
@@ -560,14 +578,25 @@ static const z80_daisy_config p8k_daisy_chain[] =
 
 /* Intel 8272 Interface */
 
+// PIO2 port B bit 7: RFDC, resets the FDC while high
+void p8k_state::fdc_reset_w(uint8_t data)
+{
+	m_i8272->reset_w(BIT(data, 7));
+}
+
 void p8k_state::fdc_irq(int state)
 {
 	m_pio2->port_b_write(state ? 0x10 : 0x00);
 }
 
 // PIO2 port A bits 0-3: /LCK0../LCK3, motor of drive 0-3 (low = on)
+// bit 4: clock/data rate (1 = 4 MHz, 5.25 inch, 250 kbit/s; 0 = 8 MHz, 8 inch, 500 kbit/s)
+// bit 6: TC, ORed with the inverted DMA interrupt (gates 1D2/7D4)
 void p8k_state::fdc_motor_w(uint8_t data)
 {
+	m_i8272->set_rate(BIT(data, 4) ? 250000 : 500000);
+	m_fdc_tc = BIT(data, 6);
+	m_i8272->tc_w(m_dma_int || m_fdc_tc);
 	for (int i = 0; i < 2; i++)
 	{
 		floppy_connector *const conn = m_i8272->subdevice<floppy_connector>(util::string_format("%d", i));
@@ -1494,6 +1523,7 @@ void p8k_state::p8k(machine_config &config)
 	m_pio2->out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	m_pio2->in_pa_callback().set_ioport("DSW");
 	m_pio2->out_pa_callback().set(FUNC(p8k_state::fdc_motor_w));
+	m_pio2->out_pb_callback().set(FUNC(p8k_state::fdc_reset_w));
 
 	I8272A(config, m_i8272, 16_MHz_XTAL / 2, true);
 	m_i8272->drq_wr_callback().set("dma", FUNC(z80dma_device::rdy_w));
