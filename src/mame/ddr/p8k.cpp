@@ -55,9 +55,12 @@
     (up to 1 MiB on the memory cards) starts at 8000.
 
     Console and boot
-      * The console is serial channel tty0 (ADM-31 terminal protocol, "-rs232
-        null_modem" with a terminal or "-bitb" socket); the other three
-        channels of each board are available as further serial ports.
+      * The console is serial channel tty1 (SIO0 channel B, labelled CONSOLE on
+        the 8 bit board; ADM-31 terminal protocol; MAME slot "rs232", e.g.
+        "-rs232 null_modem" with "-bitb" socket).  tty0 is the modem channel;
+        tty2 and tty3 are further serial ports (slots "tty0", "tty2", "tty3").
+        The 16 bit board adds tty4-tty7 (slots "tty4", "u_rs232" = tty5,
+        "tty6", "tty7").
       * Power on: the 8 bit monitor MON8 runs its self test (only after a
         power-on reset: PIO2 port A bit 7 = 1, see the DSW input), prints
         "Press RETURN" and then the prompt ">".  RETURN boots the floppy disk
