@@ -93,13 +93,30 @@ void set_reload_on_reset(bool reload) { m_reload_on_reset = reload; }
 The flag is off by default and only `p8k.cpp` sets it, so no other driver sees a
 different behaviour.
 
-*Evidence:* none from a data sheet. The Zilog Z80 CTC Product Specification
+*Evidence:* the German data sheet of the U857D ("Technische Beschreibung
+Schaltkreis fuer Zaehler- und Zeitgeberfunktion CTC U 857 D", VEB Funkwerk
+Erfurt, <https://www.tiffe.de/robotron/Bausteinuebersicht/U857D-CTC.pdf>) does
+not state explicitly what a read returns after a software reset:
+
+- p. 18, channel control word bit 1 (reset): "Kanal stoppt die laufende
+  Operation. Die Register werden nicht verändert." The channel stops and its
+  registers (time constant) are kept. This is consistent with the flag, but
+  does not prove it.
+- section 8.2, p. 32: a read returns "der aktuelle Zählerstand … die Anzahl der
+  noch notwendigen Zählschritte des Rückwärtszählers bis zum Nulldurchgang";
+  nothing is said about a stopped channel.
+
+The Zilog Z80 CTC Product Specification
 (<https://bitsavers.mirrorservice.org/components/zilog/z80/Z80_CTC_Product_Specification_Feb80.pdf>)
-says that a channel that receives a software reset "stops counting" and that
-"a new time constant word must be written" afterwards, but it does not say what
-a read returns in between. I did not find a data sheet for the U857D (the East
-German CTC). The behaviour is taken from what the P8000 monitor's hardware
-self-test requires; the driver sets the flag for exactly that reason.
+likewise says only that a channel that receives a software reset "stops
+counting". The behaviour therefore comes from the P8000 monitor's hardware
+self-test (`U880EIG.S`, routine `CZPR` and the test after it): each channel is
+started, runs, is reset with control word 3 and then read back; the monitor
+requires exactly the time constant. That is why the driver sets the flag.
+
+The data sheet confirms two other things the driver relies on: ZC/TO is a high
+pulse of 200 to 600 ns at every zero count (p. 13, 33), not a toggling level,
+and channel 3 has no ZC/TO output (p. 13).
 
 ### 1.3 `z80dma`: virtual hook only, no change in behaviour
 
