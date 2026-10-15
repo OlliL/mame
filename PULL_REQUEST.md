@@ -246,7 +246,10 @@ EPROMs of the coupled system (`mon8_1_3.1`, `mon8_2_3.1`, used by `p8000_16`)
 this monitor never tries to start or talk to a 16 bit board, which does not
 exist in that configuration (the first EPROM differs in one byte, the second in
 the code for the 16 bit coupling). A UDOS system floppy boots on `p8000_8`
-to the `%` prompt and runs `STATUS`, `DATE`, and program loading.
+to the `%` prompt and runs `STATUS`, `DATE`, `ECHO` and `CAT P=&`
+(`CAT F=L P=& ST*` lists STATUS with type, length and dates). A plain `CAT` prints
+`FILE NOT FOUND`: it lists only non-secret files and all files on that
+floppy carry the S (secret) property, so there is nothing to show.
 
 **8 bit memory control** (hardware manual 3.3/4.3): the 64 KiB address space
 is divided into 16 slices of 4K. Each slice selects nothing, the EPROM (8 KiB,
