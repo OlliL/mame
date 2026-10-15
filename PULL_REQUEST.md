@@ -202,7 +202,9 @@ the GDR (see <https://de.wikipedia.org/wiki/P8000>). A system consists of
   connected to a PIO of the 16 bit board;
 - a terminal (ADM-31 / VT100 emulation); WEGA's console is an ADM-31.
 
-The operating systems are UDOS and WEGA (UNIX like).
+The operating systems: OS/M (a CP/M clone) and UDOS (a Z80-RIO clone) are
+available on the 8 bit board; WEGA (UNIX like) is available on the 16 bit board
+only.
 
 **Board revisions.** Several revisions of the boards were built. The emulation
 follows the P8000 hardware manual ("Hardwarehandbuch") as follows:
