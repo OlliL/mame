@@ -62,6 +62,9 @@
 #include "machine/clock.h"
 #include "bus/rs232/rs232.h"
 
+//#define VERBOSE 1
+#include "logmacro.h"
+
 class p8k_16_daisy_device : public device_t, public z80_daisy_chain_interface
 {
 public:
@@ -893,10 +896,8 @@ public:
 		, m_daisy(*this, "p8k_16_daisy")
 		, m_pio0(*this, "pio0")
 		, m_pio2(*this, "pio2")
-		, m_u_ctc0(*this, "u_ctc0")
-		, m_u_ctc1(*this, "u_ctc1")
-		, m_u_sio0(*this, "u_sio0")
-		, m_u_sio1(*this, "u_sio1")
+		, m_ctc(*this, "u_ctc%u", 0U)
+		, m_sio(*this, "u_sio%u", 0U)
 		, m_u_pio0(*this, "u_pio0")
 		, m_u_pio1(*this, "u_pio1")
 		, m_u_pio2(*this, "u_pio2")
@@ -959,35 +960,54 @@ private:
 	uint8_t io_read_byte(offs_t offset);
 	void io_write_byte(offs_t offset, uint8_t data);
 
-	// 16-bit board: memory, special logic and MMUs
+	// 16-bit board, a copy of the System 8000 CPU-A board (see s8k_cpu.h)
 	DECLARE_MACHINE_RESET(p8k_16);
-	uint16_t ram16_r(address_space &space, offs_t offset, uint16_t mem_mask);
-	void ram16_w(address_space &space, offs_t offset, uint16_t data, uint16_t mem_mask);
-	bool translate16(int spacenum, bool write, offs_t &offset);
+
+	void addrmap_program(address_map &map) ATTR_COLD { map.unmap_value_low(); }
+	void addrmap_data(address_map &map) ATTR_COLD { map.unmap_value_low(); }
+	void addrmap_stack(address_map &map) ATTR_COLD { map.unmap_value_low(); }
+	void addrmap_io(address_map &map) ATTR_COLD;
+	void addrmap_sio(address_map &map) ATTR_COLD;
+
 	z8010_device *select_code_mmu(offs_t offset);
-	z8010_device *select_data_mmu(offs_t offset);
-	void segt_interrupt(int state);
-	void ns16_w(int state);
+	z8010_device *select_data_mmu(offs_t offset, uint8_t nbr);
+
+	bool translate_addr(int spacenum, bool write, offs_t &offset);
+	uint16_t ram16_r(offs_t offset, uint16_t mask);
+	void ram16_w(offs_t offset, uint16_t data, uint16_t mask);
+	uint16_t ram_r(address_space &space, offs_t offset, uint16_t mask);
+	void ram_w(address_space &space, offs_t offset, uint16_t data, uint16_t mask);
+
+	uint16_t nmiack_r();
 	uint16_t segtack_r();
-	uint16_t nmiack16_r();
-	uint16_t viack16_r();
+	uint16_t viack_r();
+	uint16_t nviack_r();
 	void mmu_instruction_end();
-	void install_memory16();
-	uint8_t scr_r() { return 0xf0 | m_scr; }
-	void scr_w(uint8_t data);
-	uint8_t nbr_r() { return m_nbr; }
-	void nbr_w(uint8_t data) { m_nbr = data; }
-	uint8_t trpl_r() { return m_reg_trpl; }
-	uint8_t if1l_r() { return m_reg_if1l; }
-	void softreset_w(uint8_t)
-	{
-		// resets the 16 bit board only, the 8 bit board keeps running
-		if (m_cpu16)
-		{
-			board16_reset();
-			u8000_reset(false);
-		}
-	}
+
+	void segt_interrupt(int state);
+
+	void soft_reset_w(uint8_t dummy);
+
+	void install_memory(offs_t lrom_end, offs_t lram_start, offs_t lmem_end);
+
+	uint8_t reg_trpl_r();
+	uint8_t reg_if1l_r();
+
+	void observe_bus_cycle(offs_t offset, bool if1);
+
+	//helpers
+	void out_ns_cb(int state);
+
+	uint8_t reg_scr_r();
+	void reg_scr_w(uint8_t data);
+	uint8_t reg_sbr_r();
+	void reg_sbr_w(uint8_t data);
+	uint8_t reg_nbr_r();
+	void reg_nbr_w(uint8_t data);
+
+	uint8_t mmu_cmd_r(offs_t offset);
+	void mmu_cmd_w(offs_t offset, uint8_t data);
+
 	void board16_reset();
 
 	// U130 clock module (16 bit board, ports FEF1-FEFF)
@@ -997,15 +1017,6 @@ private:
 	void u130_sync();
 	void u130_start_field(int index);
 	void u130_display(uint8_t *digits, bool &date);
-
-	uint8_t mmu_cmd_r(offs_t offset);
-	void mmu_cmd_w(offs_t offset, uint8_t data);
-	void invalidate16();
-
-	void p8k_16_sio_map(address_map &map) ATTR_COLD;
-	void p8k_16_datamap(address_map &map) ATTR_COLD;
-	void p8k_16_iomap(address_map &map) ATTR_COLD;
-	void p8k_16_memmap(address_map &map) ATTR_COLD;
 	void p8k_iomap(address_map &map) ATTR_COLD;
 	void p8k_memmap(address_map &map) ATTR_COLD;
 
@@ -1014,10 +1025,8 @@ private:
 	optional_device<p8k_16_daisy_device> m_daisy;
 	required_device<z80pio_device> m_pio0;        // 8 bit board: coupling PIO
 	optional_device<z80pio_device> m_pio2;        // 8 bit board
-	optional_device<z80ctc_device> m_u_ctc0;
-	optional_device<z80ctc_device> m_u_ctc1;
-	optional_device<z80sio_device> m_u_sio0;
-	optional_device<z80sio_device> m_u_sio1;
+	optional_device_array<z80ctc_device, 2> m_ctc;
+	optional_device_array<z80sio_device, 2> m_sio;
 	optional_device<z80pio_device> m_u_pio0;      // 16 bit board: coupling PIO (to 8 bit)
 	optional_device<z80pio_device> m_u_pio1;      // 16 bit board: coupling PIO (from 8 bit)
 	optional_device<z80pio_device> m_u_pio2;      // 16 bit board: WDC
@@ -1041,14 +1050,24 @@ private:
 	bool m_u_pio0_writing = false;
 	uint8_t m_u_pio0_a_bus = 0;
 	bool m_u8000_held = true;
-	uint8_t m_scr = 0;                // system configuration register (4 bit)
-	uint8_t m_nbr = 0;                // normal break register
-	uint8_t m_reg_trpl = 0;           // trap low byte register
-	uint8_t m_reg_if1l = 0;           // instruction fetch first word low byte
-	uint8_t m_lad_low = 0;
-	uint8_t m_if1_low = 0;
-	bool m_normal_mode = false;
-	bool m_segt_state = false;
+
+	// Board registers
+	uint8_t m_reg_scr   = 0xf0; // System Configuration Register (bits 4-7: switches)
+	uint8_t m_reg_sbr   = 0; // System Break Register
+	uint8_t m_reg_nbr   = 0; // Normal Break Register
+	uint8_t m_reg_trpl  = 0; // Segment trap memory address low-byte
+	uint8_t m_reg_if1l  = 0; // Segment trap instruction low-byte
+
+	// Running bus-side latches and the SEGT- line state
+	uint8_t m_lad_low   = 0; // low address byte of the current memory cycle
+	uint8_t m_if1_low   = 0; // low address byte of the last IFETCH1 cycle
+	bool m_segt_state   = false;
+
+	bool m_is_seg_os = true;    // the P8000 operating system is always segmented
+	bool m_is_seg_user = false;
+
+	int m_normal_mode = 0;
+	int m_dma_on = 0;
 
 	// U130 clock module
 	enum { U130_RUN, U130_DATE_CORR, U130_TIME_SET };
@@ -1289,22 +1308,37 @@ void p8k_state::init_p8k()
 
     P8000 16bit
 
-****************************************************************************/
+    The 16 bit board is a copy of the System 8000 CPU-A board
+    (src/devices/bus/zbi/s8k_cpu.cpp) with minimal changes: there is no ZBI
+    bus, the memory sits on the board, and the peripherals are two SIOs,
+    two CTCs and three PIOs. The names and the order of the functions follow
+    that file.
+
+***************************************************************************/
+
+#define CLK_CPU     XTAL(4'000'000)
+
+// System Configuration Register control bits 0-3
+#define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
+#define SCR_MMU_ONH     0x02    // Enable MMUs (disable linear memory)
+#define SCR_SEG_USER    0x04    // Segmented user space
+#define SCR_CLR_PARITY  0x08    // Enable parity check (not emulated)
 
 void p8k_state::machine_start()
 {
 	if (m_mmu_code)
 	{
-		install_memory16();
+		install_memory(0x3fff, 0x4000, 0x7fff);
 
-		save_item(NAME(m_scr));
-		save_item(NAME(m_nbr));
+		save_item(NAME(m_reg_scr));
+		save_item(NAME(m_reg_sbr));
+		save_item(NAME(m_reg_nbr));
 		save_item(NAME(m_reg_trpl));
 		save_item(NAME(m_reg_if1l));
 		save_item(NAME(m_lad_low));
 		save_item(NAME(m_if1_low));
-		save_item(NAME(m_normal_mode));
 		save_item(NAME(m_segt_state));
+		save_item(NAME(m_normal_mode));
 		save_item(NAME(m_u130_state));
 		save_item(NAME(m_u130_date));
 		save_item(NAME(m_u130_buttons));
@@ -1316,14 +1350,88 @@ void p8k_state::machine_start()
 	}
 }
 
-void p8k_state::p8k_16_memmap(address_map &map)
+//**************************************************************************
+//  INTERRUPT HANDLING
+//**************************************************************************
+
+void p8k_state::segt_interrupt(int state)
 {
-	// the real work is done in install_memory16(): all accesses pass through the
-	// MMU logic of the board
+	if (state && !m_segt_state)
+	{
+		// The address low bytes -- which the Z8010s cannot record --
+		// are captured at the moment the segment trap is raised.  A trap
+		// handler combines them with the high bytes latched inside the MMUs.
+		m_reg_trpl = m_lad_low;
+		m_reg_if1l = m_if1_low;
+	}
+	m_segt_state = (state != 0);
+	m_cpu16->set_input_line(z8001_device::SEGT_LINE, state ? ASSERT_LINE : CLEAR_LINE);
 }
 
-void p8k_state::p8k_16_datamap(address_map &map)
+void p8k_state::observe_bus_cycle(offs_t offset, bool if1)
 {
+	m_lad_low = uint8_t(offset);
+	if (if1)
+	{
+		m_if1_low = uint8_t(offset);
+		// Every MMU sits on the CPU's address/data bus and snoops each
+		// IFETCH1 cycle, whether or not it translates it.
+		m_mmu_code->ifetch1_observed(offset);
+		m_mmu_data->ifetch1_observed(offset);
+		m_mmu_stck->ifetch1_observed(offset);
+	}
+}
+
+uint16_t p8k_state::segtack_r()
+{
+	uint16_t code = (m_mmu_code->segtack_r() |
+					 m_mmu_data->segtack_r() |
+					 m_mmu_stck->segtack_r());
+
+	// Locally triggered?
+	if (code == 0)
+	{
+		segt_interrupt(0);
+	}
+
+	LOG("%s SEGTRAP: %d\n", machine().describe_context(), code);
+
+	return code;
+}
+
+void p8k_state::mmu_instruction_end()
+{
+	m_mmu_code->instruction_end();
+	m_mmu_data->instruction_end();
+	m_mmu_stck->instruction_end();
+}
+
+uint16_t p8k_state::viack_r()
+{
+	mmu_instruction_end();
+	return m_daisy->viack_r();
+}
+
+uint16_t p8k_state::nviack_r()
+{
+	mmu_instruction_end();
+	return 0xffff;
+}
+
+uint16_t p8k_state::nmiack_r()
+{
+	mmu_instruction_end();
+	return 0xffff;
+}
+
+void p8k_state::soft_reset_w(uint8_t dummy)
+{
+	// resets the 16 bit board only, the 8 bit board keeps running
+	if (m_cpu16)
+	{
+		board16_reset();
+		u8000_reset(false);
+	}
 }
 
 /*
@@ -1343,122 +1451,149 @@ void p8k_state::p8k_16_datamap(address_map &map)
 
 z8010_device *p8k_state::select_code_mmu(offs_t offset)
 {
-	if (m_normal_mode && (m_scr & 0x04))
-		return (uint8_t(offset >> 16) < 64) ? m_mmu_data.target() : m_mmu_stck.target();
-	return m_mmu_code.target();
-}
+	z8010_device *mmu = m_mmu_code;
+	uint8_t seg = (uint8_t)(offset >> 16);
 
-z8010_device *p8k_state::select_data_mmu(offs_t offset)
-{
-	uint8_t const seg = uint8_t(offset >> 16);
-	uint8_t const seg_offs = uint8_t(offset >> 8);
+	LOG("%s CODE MMU SELECT, offset: %06x\n", machine().describe_context(), offset);
 
-	if (!m_normal_mode)
-		return m_mmu_code;
-	if (m_scr & 0x04)
-		return (seg < 64) ? m_mmu_data.target() : m_mmu_stck.target();
-	return (seg_offs < m_nbr) ? m_mmu_data.target() : m_mmu_stck.target();
-}
-
-bool p8k_state::translate16(int spacenum, bool write, offs_t &offset)
-{
-	bool const side_effects = !machine().side_effects_disabled();
-	bool const code_access = (spacenum == AS_PROGRAM);
-	bool const stack_access = (spacenum == z8001_device::AS_STACK);
-	z8001_device &cpu = *static_cast<z8001_device *>(m_cpu16.target());
-
-	offset <<= 1;
-
-	int const st = code_access ?
-			(cpu.is_ifetch1() ? z8002_device::ST_IFETCH_1 : z8002_device::ST_IFETCH_N) :
-			(stack_access ? z8002_device::ST_REQ_STACK : z8002_device::ST_REQ_DATA);
-
-	if (side_effects)
+	if (m_is_seg_os)
 	{
-		m_lad_low = uint8_t(offset);
-		if (st == z8002_device::ST_IFETCH_1)
+		if (m_is_seg_user && m_normal_mode)
 		{
-			m_if1_low = uint8_t(offset);
-			// every MMU snoops each IFETCH1 cycle
-			m_mmu_code->ifetch1_observed(offset);
-			m_mmu_data->ifetch1_observed(offset);
-			m_mmu_stck->ifetch1_observed(offset);
+			if (seg < 64)
+				mmu = m_mmu_data;
+			else
+				mmu = m_mmu_stck;
 		}
-
-		// SUP is shared by all three MMUs
-		if (m_mmu_code->cpu_suppressed() || m_mmu_data->cpu_suppressed() || m_mmu_stck->cpu_suppressed())
-			return false;
 	}
 
-	z8010_device *const mmu = code_access ? select_code_mmu(offset) : select_data_mmu(offset);
-	auto const result = mmu->translate(offset & 0x3f'ffff, write, true, false, st);
-	if (result.suppress)
-		return false;
-	if (m_scr & 0x02)
-	{
-		if (!result.address_driven)
-			return false;
-		offset = result.address;
-	}
-	return true;
+	return mmu;
 }
 
-uint16_t p8k_state::ram16_r(address_space &space, offs_t offset, uint16_t mem_mask)
+z8010_device *p8k_state::select_data_mmu(offs_t offset, uint8_t nbr)
 {
-	if (!translate16(space.spacenum(), false, offset))
-		return (space.spacenum() == AS_PROGRAM) ? 0x8d07 : 0xffff; // NOP on suppressed fetch
+	z8010_device *mmu = m_mmu_stck;
+	uint8_t seg = (uint8_t)(offset >> 16);
+	uint8_t seg_offs = (uint8_t)(offset >> 8);
 
+	LOG("%s DATA MMU SELECT, offset: %06x\n", machine().describe_context(), offset);
+
+	if (m_is_seg_os)
+	{
+		if (!m_normal_mode) // System mode
+		{
+			mmu = m_mmu_code;
+		}
+		else if (m_is_seg_user)
+		{
+			if (seg < 64)
+			{
+				mmu = m_mmu_data;
+			}
+		}
+		else if (seg_offs < nbr)
+		{
+			mmu = m_mmu_data;
+		}
+	}
+
+	return mmu;
+}
+
+uint16_t p8k_state::ram16_r(offs_t offset, uint16_t mask)
+{
 	offs_t const word = offset >> 1;
 	return (word < m_ram.length()) ? m_ram[word] : 0xffff;
 }
 
-void p8k_state::ram16_w(address_space &space, offs_t offset, uint16_t data, uint16_t mem_mask)
+void p8k_state::ram16_w(offs_t offset, uint16_t data, uint16_t mask)
 {
-	if (!translate16(space.spacenum(), true, offset))
-		return;
-
 	offs_t const word = offset >> 1;
 	if (word < m_ram.length())
-		COMBINE_DATA(&m_ram[word]);
+		m_ram[word] = (m_ram[word] & ~mask) | (data & mask);
 }
 
-void p8k_state::install_memory16()
+uint16_t p8k_state::ram_r(address_space &space, offs_t offset, uint16_t mask)
 {
-	address_space &pspace = m_cpu16->space(AS_PROGRAM);
-	address_space &dspace = m_cpu16->space(AS_DATA);
-	address_space &sspace = m_cpu16->space(z8001_device::AS_STACK);
+	uint16_t data = 0;
+	if (translate_addr(space.spacenum(), false, offset))
+		data = ram16_r(offset, mask);
+	else if (space.spacenum() == AS_PROGRAM)
+		data = 0x8d07;  // NOP instruction
 
-	for (address_space *space : { &pspace, &dspace, &sspace })
-		space->install_readwrite_handler(0x00'0000, 0x7f'ffff,
-				read16_delegate(*this, FUNC(p8k_state::ram16_r)), write16_delegate(*this, FUNC(p8k_state::ram16_w)));
-
-	pspace.install_view(0x0000, 0x7fff, m_view_code);
-	dspace.install_view(0x0000, 0x7fff, m_view_data);
-	sspace.install_view(0x0000, 0x7fff, m_view_stck);
-
-	void *const rom = memregion("cpu16")->base();
-	m_view_code[0].install_rom(0x0000, 0x3fff, rom);
-	m_view_code[0].install_ram(0x4000, 0x7fff, &m_local_ram[0]);
-	m_view_data[0].install_rom(0x0000, 0x3fff, rom);
-	m_view_data[0].install_ram(0x4000, 0x7fff, &m_local_ram[0]);
-	m_view_stck[0].install_ram(0x4000, 0x7fff, &m_local_ram[0]);
+	return data;
 }
 
-void p8k_state::invalidate16()
+void p8k_state::ram_w(address_space &space, offs_t offset, uint16_t data, uint16_t mask)
 {
-	m_cpu16->space(AS_PROGRAM).invalidate_caches(read_or_write::READWRITE);
-	m_cpu16->space(AS_DATA).invalidate_caches(read_or_write::READWRITE);
-	m_cpu16->space(z8001_device::AS_STACK).invalidate_caches(read_or_write::READWRITE);
+	if (translate_addr(space.spacenum(), true, offset))
+		ram16_w(offset, data, mask);
 }
 
-void p8k_state::scr_w(uint8_t data)
+void p8k_state::install_memory(offs_t lrom_end, offs_t lram_start, offs_t lmem_end)
 {
-	uint8_t const diff = (data ^ m_scr) & 0x0f;
-	m_scr = data & 0x0f;
+	void *LROM, *LRAM;
 
-	if (diff & 0x01)
+	address_space& pspace = m_cpu16->space(AS_PROGRAM);
+	address_space& dspace = m_cpu16->space(AS_DATA);
+	address_space& sspace = m_cpu16->space(z8001_device::AS_STACK);
+
+	// Install handlers over entire address space
+	pspace.install_readwrite_handler(0x00'0000, 0x7f'ffff,
+		read16_delegate(*this, FUNC(p8k_state::ram_r)), write16_delegate(*this, FUNC(p8k_state::ram_w)));
+	dspace.install_readwrite_handler(0x00'0000, 0x7f'ffff,
+		read16_delegate(*this, FUNC(p8k_state::ram_r)), write16_delegate(*this, FUNC(p8k_state::ram_w)));
+	sspace.install_readwrite_handler(0x00'0000, 0x7f'ffff,
+		read16_delegate(*this, FUNC(p8k_state::ram_r)), write16_delegate(*this, FUNC(p8k_state::ram_w)));
+
+	pspace.install_view(0x0000, lmem_end, m_view_code);
+	dspace.install_view(0x0000, lmem_end, m_view_data);
+	sspace.install_view(0x0000, lmem_end, m_view_stck);
+
+	LROM = memregion("cpu16")->base();
+	LRAM = memshare("local_ram")->ptr();
+	m_view_code[0].install_rom(0x0000, lrom_end, LROM);
+	m_view_code[0].install_ram(lram_start, lmem_end, LRAM);
+	m_view_data[0].install_rom(0x0000, lrom_end, LROM);
+	m_view_data[0].install_ram(lram_start, lmem_end, LRAM);
+	m_view_stck[0].install_ram(lram_start, lmem_end, LRAM);
+}
+
+uint8_t p8k_state::reg_trpl_r()
+{
+	return m_reg_trpl;
+}
+
+uint8_t p8k_state::reg_if1l_r()
+{
+	return m_reg_if1l;
+}
+
+void p8k_state::out_ns_cb(int state)
+{
+	LOG("%s NORMAL/SYSTEM MODE CHANGE: %d\n", machine().describe_context(), state);
+
+	m_normal_mode = state;
+}
+
+//**************************************************************************
+//  ADDRESS MAPS
+//**************************************************************************
+
+uint8_t p8k_state::reg_scr_r()
+{
+	return m_reg_scr;
+}
+
+void p8k_state::reg_scr_w(uint8_t data)
+{
+	uint8_t diff = data ^ m_reg_scr;
+
+	LOG("%s reg_scr_w: %02x\n", machine().describe_context(), data);
+
+	if (diff & SCR_BD_MEMON)
 	{
-		if (m_scr & 0x01)
+		if (data & SCR_BD_MEMON)
 		{
 			m_view_code.disable();
 			m_view_data.disable();
@@ -1472,49 +1607,41 @@ void p8k_state::scr_w(uint8_t data)
 		}
 	}
 
-	if (diff & 0x06)
-		invalidate16();
-}
-
-// segment trap: the address low bytes are latched at the moment the trap is raised
-void p8k_state::segt_interrupt(int state)
-{
-	if (state && !m_segt_state)
+	if (diff & SCR_MMU_ONH)
 	{
-		m_reg_trpl = m_lad_low;
-		m_reg_if1l = m_if1_low;
+		m_cpu16->space(AS_PROGRAM).invalidate_caches(read_or_write::READWRITE);
+		m_cpu16->space(AS_DATA).invalidate_caches(read_or_write::READWRITE);
+		m_cpu16->space(z8001_device::AS_STACK).invalidate_caches(read_or_write::READWRITE);
 	}
-	m_segt_state = (state != 0);
-	m_cpu16->set_input_line(z8001_device::SEGT_LINE, state ? ASSERT_LINE : CLEAR_LINE);
+
+	if (diff & SCR_SEG_USER)
+	{
+		m_is_seg_user = !!(data & SCR_SEG_USER);
+	}
+
+	m_reg_scr = (m_reg_scr & 0xf0) | ( data & 0x0f );   // Mask off read-only nibble
 }
 
-void p8k_state::ns16_w(int state)
+uint8_t p8k_state::reg_sbr_r()
 {
-	m_normal_mode = bool(state);
+	return m_reg_sbr;
 }
 
-uint16_t p8k_state::segtack_r()
+void p8k_state::reg_sbr_w(uint8_t data)
 {
-	return m_mmu_code->segtack_r() | m_mmu_data->segtack_r() | m_mmu_stck->segtack_r();
+	LOG("%s reg_SBR_w: %02x\n", machine().describe_context(), data);
+	m_reg_sbr = data;
 }
 
-void p8k_state::mmu_instruction_end()
+uint8_t p8k_state::reg_nbr_r()
 {
-	m_mmu_code->instruction_end();
-	m_mmu_data->instruction_end();
-	m_mmu_stck->instruction_end();
+	return m_reg_nbr;
 }
 
-uint16_t p8k_state::nmiack16_r()
+void p8k_state::reg_nbr_w(uint8_t data)
 {
-	mmu_instruction_end();
-	return 0xffff;
-}
-
-uint16_t p8k_state::viack16_r()
-{
-	mmu_instruction_end();
-	return m_daisy->viack_r();
+	LOG("%s reg_NBR_w: %02x\n", machine().describe_context(), data);
+	m_reg_nbr = data;
 }
 
 // MMU commands in the special I/O space; address bits 1-3 select the MMU (active low),
@@ -1523,11 +1650,13 @@ uint8_t p8k_state::mmu_cmd_r(offs_t offset)
 {
 	if (!BIT(offset, 0))
 	{
-		uint8_t const reg = uint8_t(offset >> 8);
+		uint8_t reg = (uint8_t)(offset >> 8);
+
 		if (!BIT(offset, 1)) return m_mmu_code->read(reg);
 		if (!BIT(offset, 2)) return m_mmu_data->read(reg);
 		if (!BIT(offset, 3)) return m_mmu_stck->read(reg);
 	}
+
 	return 0xff;
 }
 
@@ -1535,12 +1664,62 @@ void p8k_state::mmu_cmd_w(offs_t offset, uint8_t data)
 {
 	if (!BIT(offset, 0))
 	{
-		uint8_t const reg = uint8_t(offset >> 8);
+		uint8_t reg = (uint8_t)(offset >> 8);
+
 		if (!BIT(offset, 1)) m_mmu_code->write(reg, data);
 		if (!BIT(offset, 2)) m_mmu_data->write(reg, data);
 		if (!BIT(offset, 3)) m_mmu_stck->write(reg, data);
-		invalidate16();
+
+		m_cpu16->space(AS_PROGRAM).invalidate_caches(read_or_write::READWRITE);
+		m_cpu16->space(AS_DATA).invalidate_caches(read_or_write::READWRITE);
+		m_cpu16->space(z8001_device::AS_STACK).invalidate_caches(read_or_write::READWRITE);
 	}
+}
+
+void p8k_state::addrmap_sio(address_map &map)
+{
+	map.unmap_value_high();
+	map(0x00f0, 0x20fc).rw(FUNC(p8k_state::mmu_cmd_r), FUNC(p8k_state::mmu_cmd_w));
+}
+
+bool p8k_state::translate_addr(int spacenum, bool write, offs_t &offset)
+{
+	bool const stack_access = (spacenum == z8001_device::AS_STACK);
+	bool const side_effects = !machine().side_effects_disabled();
+
+	offset <<= 1;
+
+	bool const code_access = (spacenum == AS_PROGRAM);
+	int const st = code_access ?
+				(m_cpu16->is_ifetch1() ?
+					z8002_device::ST_IFETCH_1 :
+					z8002_device::ST_IFETCH_N) :
+				(stack_access ?
+					z8002_device::ST_REQ_STACK :
+					z8002_device::ST_REQ_DATA);
+
+	if (side_effects)
+		observe_bus_cycle(offset, !m_dma_on && st == z8002_device::ST_IFETCH_1);
+	// SUP is shared by all three MMUs, not just the selected address driver.
+	if (side_effects && !m_dma_on &&
+		(m_mmu_code->cpu_suppressed() || m_mmu_data->cpu_suppressed() || m_mmu_stck->cpu_suppressed()))
+		return false;
+
+	z8010_device *const mmu = code_access ?
+						select_code_mmu(offset) : select_data_mmu(offset, m_reg_nbr);
+
+	if (mmu)
+	{
+		LOG("%s MMU MEM REQ (space %d): %06x\n", machine().describe_context(), spacenum, offset);
+
+		auto const result = mmu->translate(offset & 0x3f'ffff, write, true, m_dma_on, st);
+		if (result.suppress || ((m_reg_scr & SCR_MMU_ONH) && !result.address_driven))
+			return false;
+		if (m_reg_scr & SCR_MMU_ONH)
+			offset = result.address;
+	}
+
+	return true;
 }
 
 /***************************************************************************
@@ -1765,11 +1944,6 @@ void p8k_state::u130_w(offs_t offset, uint8_t data)
 	}
 }
 
-void p8k_state::p8k_16_sio_map(address_map &map)
-{
-	map.unmap_value_high();
-	map(0x00f0, 0x20fc).rw(FUNC(p8k_state::mmu_cmd_r), FUNC(p8k_state::mmu_cmd_w));
-}
 
 
 
@@ -1807,11 +1981,16 @@ void p8k_state::pio0_w(offs_t offset, uint8_t data)
 
 void p8k_state::board16_reset()
 {
-	m_scr = 0;
-	m_nbr = 0;
+	m_is_seg_user = false;
+
+	m_reg_scr = 0xf0;
+	m_reg_sbr = 0;
+	m_reg_nbr = 0;
 	m_reg_trpl = 0;
 	m_reg_if1l = 0;
-	m_normal_mode = false;
+	m_lad_low = 0;
+	m_if1_low = 0;
+	m_normal_mode = 0;
 	m_segt_state = false;
 	m_p16a = m_p16b = 0;
 	m_u_pio0_a_bus = 0;
@@ -1819,10 +1998,10 @@ void p8k_state::board16_reset()
 	m_view_code.select(0);
 	m_view_data.select(0);
 	m_view_stck.select(0);
-	m_u_ctc0->reset();
-	m_u_ctc1->reset();
-	m_u_sio0->reset();
-	m_u_sio1->reset();
+	m_ctc[0]->reset();
+	m_ctc[1]->reset();
+	m_sio[0]->reset();
+	m_sio[1]->reset();
 	m_u_pio0->reset();
 	m_u_pio1->reset();
 	m_u_pio2->reset();
@@ -1978,22 +2157,23 @@ void p8k_state::pio2_w(offs_t offset, uint8_t data)
 		m_wdc->control_w(m_u_pio2->port_b_read());
 }
 
-void p8k_state::p8k_16_iomap(address_map &map)
+void p8k_state::addrmap_io(address_map &map)
 {
 	map(0x0fef0, 0x0fefe + 1).rw(FUNC(p8k_state::u130_r), FUNC(p8k_state::u130_w)).umask16(0x00ff);   // U130 clock module
-	map(0x0ff80, 0x0ff87).rw(m_u_sio0, FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
-	map(0x0ff88, 0x0ff8f).rw(m_u_sio1, FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
+	map(0x0ff80, 0x0ff87).rw(m_sio[0], FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
+	map(0x0ff88, 0x0ff8f).rw(m_sio[1], FUNC(z80sio_device::cd_ba_r), FUNC(z80sio_device::cd_ba_w)).umask16(0x00ff);
 	map(0x0ff90, 0x0ff97).rw(FUNC(p8k_state::u_pio0_r), FUNC(p8k_state::u_pio0_w)).umask16(0x00ff);
 	map(0x0ff98, 0x0ff9f).rw(m_u_pio1, FUNC(z80pio_device::read), FUNC(z80pio_device::write)).umask16(0x00ff);
 	map(0x0ffa0, 0x0ffa7).rw(FUNC(p8k_state::pio2_r), FUNC(p8k_state::pio2_w)).umask16(0x00ff);
-	map(0x0ffa8, 0x0ffaf).rw(m_u_ctc0, FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
-	map(0x0ffb0, 0x0ffb7).rw(m_u_ctc1, FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
-	map(0x0ffc0, 0x0ffc1).rw(FUNC(p8k_state::scr_r), FUNC(p8k_state::scr_w)).umask16(0x00ff);
-	map(0x0ffd0, 0x0ffd1).rw(FUNC(p8k_state::nbr_r), FUNC(p8k_state::nbr_w)).umask16(0x00ff);
+	map(0x0ffa8, 0x0ffaf).rw(m_ctc[0], FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
+	map(0x0ffb0, 0x0ffb7).rw(m_ctc[1], FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
+	map(0x0ffc0, 0x0ffc1).rw(FUNC(p8k_state::reg_scr_r), FUNC(p8k_state::reg_scr_w)).umask16(0x00ff);
+	map(0x0ffc8, 0x0ffc9).rw(FUNC(p8k_state::reg_sbr_r), FUNC(p8k_state::reg_sbr_w)).umask16(0x00ff);
+	map(0x0ffd0, 0x0ffd1).rw(FUNC(p8k_state::reg_nbr_r), FUNC(p8k_state::reg_nbr_w)).umask16(0x00ff);
 	map(0x0ffe0, 0x0ffe1).w(m_daisy, FUNC(p8k_16_daisy_device::reti_w)).umask16(0x00ff);
-	map(0x0ffe8, 0x0ffe9).w(FUNC(p8k_state::softreset_w)).umask16(0x00ff);
-	map(0x0fff0, 0x0fff1).r(FUNC(p8k_state::trpl_r)).umask16(0x00ff);
-	map(0x0fff8, 0x0fff9).r(FUNC(p8k_state::if1l_r)).umask16(0x00ff);
+	map(0x0ffe8, 0x0ffe9).w(FUNC(p8k_state::soft_reset_w)).umask16(0x00ff);
+	map(0x0fff0, 0x0fff1).r(FUNC(p8k_state::reg_trpl_r)).umask16(0x00ff);
+	map(0x0fff8, 0x0fff9).r(FUNC(p8k_state::reg_if1l_r)).umask16(0x00ff);
 }
 
 
@@ -2132,59 +2312,63 @@ void p8k_state::p8k_16(machine_config &config)
 	p8k(config);
 
 	/* 16 bit board: CPU and memory management */
-	z8001_device &cpu16(Z8001(config, m_cpu16, XTAL(4'000'000)));
-	cpu16.set_addrmap(AS_PROGRAM, &p8k_state::p8k_16_memmap);
-	cpu16.set_addrmap(AS_DATA, &p8k_state::p8k_16_datamap);
-	cpu16.set_addrmap(z8001_device::AS_STACK, &p8k_state::p8k_16_datamap);
-	cpu16.set_addrmap(AS_IO, &p8k_state::p8k_16_iomap);
-	cpu16.set_addrmap(z8001_device::AS_SIO, &p8k_state::p8k_16_sio_map);
-	cpu16.viack().set(FUNC(p8k_state::viack16_r));
-	cpu16.nmiack().set(FUNC(p8k_state::nmiack16_r));
-	cpu16.segtack().set(FUNC(p8k_state::segtack_r));
-	cpu16.ns().set(FUNC(p8k_state::ns16_w));
+	Z8001(config, m_cpu16, CLK_CPU);
+	m_cpu16->set_addrmap(AS_PROGRAM, &p8k_state::addrmap_program);
+	m_cpu16->set_addrmap(AS_DATA, &p8k_state::addrmap_data);
+	m_cpu16->set_addrmap(z8001_device::AS_STACK, &p8k_state::addrmap_stack);
+	m_cpu16->set_addrmap(AS_IO, &p8k_state::addrmap_io);
+	m_cpu16->set_addrmap(z8001_device::AS_SIO, &p8k_state::addrmap_sio);
+	m_cpu16->viack().set(FUNC(p8k_state::viack_r));
+	m_cpu16->nviack().set(FUNC(p8k_state::nviack_r));
+	m_cpu16->segtack().set(FUNC(p8k_state::segtack_r));
+	m_cpu16->nmiack().set(FUNC(p8k_state::nmiack_r));
+	m_cpu16->ns().set(FUNC(p8k_state::out_ns_cb));
 
-	Z8010(config, m_mmu_code, 4'000'000).out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
-	Z8010(config, m_mmu_data, 4'000'000).out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
-	Z8010(config, m_mmu_stck, 4'000'000).out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
+	Z8010(config, m_mmu_code, CLK_CPU);
+	m_mmu_code->out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
+	Z8010(config, m_mmu_data, CLK_CPU);
+	m_mmu_data->out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
+	Z8010(config, m_mmu_stck, CLK_CPU);
+	m_mmu_stck->out_segt_cb().set(FUNC(p8k_state::segt_interrupt));
 
 	P8K_16_DAISY(config, m_daisy);
 	m_daisy->set_daisy_config(p8k_16_daisy_chain);
 
 	clock_device &uart_clock(CLOCK(config, "u_uart_clock", 307200));
-	uart_clock.signal_handler().set(m_u_sio0, FUNC(z80sio_device::txcb_w));
-	uart_clock.signal_handler().append(m_u_sio0, FUNC(z80sio_device::rxcb_w));
+	uart_clock.signal_handler().set(m_sio[0], FUNC(z80sio_device::txcb_w));
+	uart_clock.signal_handler().append(m_sio[0], FUNC(z80sio_device::rxcb_w));
 
 	/* peripheral hardware */
-	Z80CTC(config, m_u_ctc0, XTAL(4'000'000)).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-	Z80CTC(config, m_u_ctc1, XTAL(4'000'000)).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80CTC(config, m_ctc[0], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80CTC(config, m_ctc[1], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
-	Z80SIO(config, m_u_sio0, XTAL(4'000'000));
-	m_u_sio0->out_txdb_callback().set("u_rs232", FUNC(rs232_port_device::write_txd));
-	m_u_sio0->out_dtrb_callback().set("u_rs232", FUNC(rs232_port_device::write_dtr));
-	m_u_sio0->out_rtsb_callback().set("u_rs232", FUNC(rs232_port_device::write_rts));
-	m_u_sio0->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80SIO(config, m_sio[0], CLK_CPU);
+	m_sio[0]->out_txdb_callback().set("u_rs232", FUNC(rs232_port_device::write_txd));
+	m_sio[0]->out_dtrb_callback().set("u_rs232", FUNC(rs232_port_device::write_dtr));
+	m_sio[0]->out_rtsb_callback().set("u_rs232", FUNC(rs232_port_device::write_rts));
+	m_sio[0]->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
 	rs232_port_device &rs232(RS232_PORT(config, "u_rs232", default_rs232_devices, nullptr));
-	rs232.rxd_handler().set(m_u_sio0, FUNC(z80sio_device::rxb_w));
-	rs232.cts_handler().set(m_u_sio0, FUNC(z80sio_device::ctsb_w));
+	rs232.rxd_handler().set(m_sio[0], FUNC(z80sio_device::rxb_w));
+	rs232.cts_handler().set(m_sio[0], FUNC(z80sio_device::ctsb_w));
 
-	Z80SIO(config, m_u_sio1, XTAL(4'000'000)).out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	Z80SIO(config, m_sio[1], CLK_CPU).out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
 	// coupling PIOs: PIO0 sends to the 8 bit board, PIO1 receives from it
-	Z80PIO(config, m_u_pio0, XTAL(4'000'000));
+	Z80PIO(config, m_u_pio0, CLK_CPU);
 	m_u_pio0->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 	m_u_pio0->out_pb_callback().set(FUNC(p8k_state::coupling_u_pio0_b_w));
 	m_u_pio0->in_pb_callback().set(FUNC(p8k_state::coupling_u_pio0_b_r));
 	m_u_pio0->out_ardy_callback().set(FUNC(p8k_state::coupling_ardy0_w));
 	m_u_pio0->out_pa_callback().set(FUNC(p8k_state::coupling_u_pio0_a_w));
 
-	Z80PIO(config, m_u_pio1, XTAL(4'000'000));
+	Z80PIO(config, m_u_pio1, CLK_CPU);
 	m_u_pio1->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 	m_u_pio1->in_pa_callback().set(FUNC(p8k_state::coupling_u_pio1_a_r));
 	m_u_pio1->in_pb_callback().set(FUNC(p8k_state::coupling_u_pio1_b_r));
 	m_u_pio1->out_ardy_callback().set(FUNC(p8k_state::coupling_ardy1_w));
 
-	Z80PIO(config, m_u_pio2, XTAL(4'000'000));
+	Z80PIO(config, m_u_pio2, CLK_CPU);
 	m_u_pio2->out_int_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
 	// Winchester controller (software emulation) on PIO2
