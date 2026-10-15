@@ -6,20 +6,59 @@
 
     Author: Oliver Lehmann <lehmann@ans-netz.de>
 
-    The module is a quartz clock with a six digit seven segment display and
-    two keys. The 16 bit board reads the display digits and presses the keys
+    The module is a quartz clock with a six digit seven segment LCD and
+    three keys. The 16 bit board reads the display digits and presses the keys
     (see timer.c of the kernel and sa.timer.c):
 
       FEF1 read   0xBF = module present
-      FEF1 write  bit 0 = key 1, bit 1 = key 2
-      FEF5..FEFF  digits 1-6 (FEF5 = rightmost). Bits 0-4 = segments, bit 7 of
-                  the sixth digit = clock pulse, bit 3 of the sixth digit is
-                  set while the date is shown (the module shows hh:mm:ss or
-                  mm.dd.yy)
+      FEF1 write  bit 0 = VT (recessed key), bit 1 = HT (main key),
+                  bit 2 = ST (stop watch key, not used by the software and
+                  not emulated)
+      FEF5..FEFF  digits 1-6 (FEF5 = rightmost). Bits 0-4 = segments, bit 5 =
+                  COM (see below), bit 7 of the sixth digit = clock pulse, bit 3
+                  of the sixth digit is set while the date is shown (the module
+                  shows hh:mm:ss or mm.dd.yy)
 
-    Key 2 toggles between time and date. Setting the clock (sa.timer) is done
-    by counting up one field after the other until the software sees the
-    value it wants; it is then taken over with key 1.
+    HT toggles between time and date (data sheet: HT shows the date, pressed
+    twice the seconds). Setting the clock (sa.timer) is done by counting up
+    one field after the other with VT/HT until the software sees the value it
+    wants; it is then taken over with VT.
+
+    Hardware (schematic "EAW P8000 Echtzeituhr V2" drawn by Oliver Lehmann;
+    the drawing may contain errors)
+
+      * U15 is the CMOS watch circuit U 130 X (metal gate CMOS, 32.768 kHz
+        quartz, LCD driven directly, battery supply of about 1.55 V; data
+        sheet: radio fernsehen elektronik 7/1984 pp. 456-458).  It has the
+        segment outputs a1..g6 of six digits, the date symbol DAT, a COM
+        output for the back plane of the LCD, seven weekday symbol outputs
+        (y1..y7, not read out by the board) and the key inputs HT (main key),
+        VT (recessed key) and ST (stop key), which are active when connected
+        to Udd.
+      * The LCD is driven with a 32 Hz square wave: a segment that is visible
+        gets the inverted back plane signal, a segment that is not visible
+        gets the same phase as COM.  The segment drive outputs are therefore
+        what the board reads, together with COM: when bit 5 (COM) is set the
+        software inverts the value (invalue() in timer.c).  The emulation
+        returns the already decoded segments with COM = 0.
+      * The six digits are read through six 4000 series CMOS tri-state hex
+        buffers (U2-U7, 40098).  Each puts the segment outputs of one digit
+        and COM on the data bus bits 0-5 (via the 74245 bus transceiver U1
+        with 4.7k pull-ups).  They are selected by a 74138 (U12) from A1-A3:
+        FEFF = hours tens (HH1), FEFD = hours units (HH2), FEFB = minutes
+        tens (MI1), FEF9 = minutes units (MI2), FEF7 = seconds tens (SS1),
+        FEF5 = seconds units (SS2).  The outputs Q6/Q7 of the 74138 (FEF3, FEF1)
+        have no buffer behind them.  The complete address decoding (only odd
+        addresses FEF1-FEFF of the I/O space) is made by a 74688
+        comparator (U10, high byte FE, I/O- enable) and a 7430 (U9, A0 and
+        A4-A7).  The drawing does not explain why FEF1 reads 0xBF (bit 6 low)
+        which the software uses as the "module present" signature.
+      * The keys are not wired to switches.  A CMOS 4035 4 bit register (U8,
+        parallel load) takes data bus bits 0-2 on the write strobe (DS-)
+        and drives the key inputs: Q1 = VT, Q2 = HT, Q3 = ST (Q4 is not
+        used); MRESET- clears it.  A key is "pressed" for as long as its bit
+        is 1.  The software waits a while after every write (outvalue() in
+        timer.c) because the watch circuit debounces its key inputs.
 
     In this emulation the display shows the UTC time of the host. The
     correction sequence is accepted and shows the counting fields, but the
@@ -167,7 +206,7 @@ void p8k_u130_device::write(offs_t offset, uint8_t data)
 
 	if (BIT(rising, 1))
 	{
-		// key 2
+		// HT (key 2)
 		switch (m_state)
 		{
 		case STATE_RUN:
@@ -189,7 +228,7 @@ void p8k_u130_device::write(offs_t offset, uint8_t data)
 
 	if (BIT(rising, 0))
 	{
-		// key 1
+		// VT (key 1)
 		system_time st;
 		machine().current_datetime(st);
 		system_time::full_time const &t = st.utc_time;

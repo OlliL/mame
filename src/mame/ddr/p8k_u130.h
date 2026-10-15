@@ -35,8 +35,8 @@ private:
 	enum { STATE_RUN, STATE_DATE_CORR, STATE_TIME_SET };
 	uint8_t m_state = STATE_RUN;
 	bool m_date = false;              // display shows the date
-	uint8_t m_buttons = 0;            // last value written to FEF1 (bit 0 = key 1, bit 1 = key 2)
-	int m_step = 0;                   // number of key 1 presses during a correction
+	uint8_t m_buttons = 0;            // last value written to FEF1 (bit 0 = VT, bit 1 = HT)
+	int m_step = 0;                   // number of VT presses during a correction
 	int m_live = -1;                  // field that is currently counting up
 	int m_start = 0;                  // value of that field when it started
 	attotime m_stamp;                 // time at which it started
