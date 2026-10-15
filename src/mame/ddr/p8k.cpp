@@ -164,7 +164,8 @@ private:
 	void port0_w(offs_t offset, uint8_t data);
 	DECLARE_MACHINE_RESET(p8k);
 
-	[[maybe_unused]] void fdc_irq(int state);
+	void fdc_irq(int state);
+	void fdc_motor_w(uint8_t data);
 	void p8k_daisy_interrupt(int state);
 	void p8k_dma_irq_w(int state);
 	void p8k_16_daisy_interrupt(int state);
@@ -409,12 +410,20 @@ void p8k_state::memory_write_byte(offs_t offset, uint8_t data)
 
 uint8_t p8k_state::io_read_byte(offs_t offset)
 {
+	// the DMA reads the FDC data register with DACK, which is not the CPU access to the FIFO
+	if (offset == 0x21)
+		return m_i8272->dma_r();
 	address_space& prog_space = m_maincpu->space(AS_IO);
 	return prog_space.read_byte(offset);
 }
 
 void p8k_state::io_write_byte(offs_t offset, uint8_t data)
 {
+	if (offset == 0x21)
+	{
+		m_i8272->dma_w(data);
+		return;
+	}
 	address_space& prog_space = m_maincpu->space(AS_IO);
 	prog_space.write_byte(offset, data);
 }
@@ -442,8 +451,20 @@ void p8k_state::fdc_irq(int state)
 	m_pio2->port_b_write(state ? 0x10 : 0x00);
 }
 
+// PIO2 port A bits 0-3: /LCK0../LCK3, motor of drive 0-3 (low = on)
+void p8k_state::fdc_motor_w(uint8_t data)
+{
+	for (int i = 0; i < 2; i++)
+	{
+		floppy_connector *const conn = m_i8272->subdevice<floppy_connector>(util::string_format("%d", i));
+		if (conn && conn->get_device())
+			conn->get_device()->mon_w(BIT(data, i));
+	}
+}
+
 static void p8k_floppies(device_slot_interface &device)
 {
+	device.option_add("525qd", FLOPPY_525_QD);   // 5.25 inch, double sided, double density, 96 tpi (hardware manual 3.1)
 	device.option_add("525hd", FLOPPY_525_HD);
 }
 
@@ -1293,11 +1314,13 @@ void p8k_state::p8k(machine_config &config)
 	Z80PIO(config, m_pio2, 1229000);
 	m_pio2->out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	m_pio2->in_pa_callback().set_ioport("DSW");
+	m_pio2->out_pa_callback().set(FUNC(p8k_state::fdc_motor_w));
 
 	I8272A(config, m_i8272, 16_MHz_XTAL / 2, true);
 	m_i8272->drq_wr_callback().set("dma", FUNC(z80dma_device::rdy_w));
-	FLOPPY_CONNECTOR(config, "i8272:0", p8k_floppies, "525hd", floppy_image_device::default_mfm_floppy_formats);
-	FLOPPY_CONNECTOR(config, "i8272:1", p8k_floppies, "525hd", floppy_image_device::default_mfm_floppy_formats);
+	m_i8272->intrq_wr_callback().set(FUNC(p8k_state::fdc_irq));
+	FLOPPY_CONNECTOR(config, "i8272:0", p8k_floppies, "525qd", floppy_image_device::default_mfm_floppy_formats);
+	FLOPPY_CONNECTOR(config, "i8272:1", p8k_floppies, "525qd", floppy_image_device::default_mfm_floppy_formats);
 
 	/* sound hardware */
 	SPEAKER(config, "mono").front_center();
