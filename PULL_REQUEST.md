@@ -1,4 +1,4 @@
-# ddr/p8k.cpp: Robotron/EAW P8000, now with the 16 bit board, boots WEGA
+# ddr/p8k.cpp: EAW P8000, now with the 16 bit board, boots WEGA
 
 This moves the P8000 driver from `skeleton/` to `ddr/` and makes it work. The
 16 bit board (Z8001) is emulated and coupled to the 8 bit board (Z80), the
