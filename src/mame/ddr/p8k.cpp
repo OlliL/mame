@@ -1531,6 +1531,8 @@ void p8k_state::p8k(machine_config &config)
 	FLOPPY_CONNECTOR(config, "i8272:0", p8k_floppies, "525qd", floppy_image_device::default_mfm_floppy_formats);
 	FLOPPY_CONNECTOR(config, "i8272:1", p8k_floppies, "525qd", floppy_image_device::default_mfm_floppy_formats);
 
+	SOFTWARE_LIST(config, "flop_list").set_original("p8000_flop");
+
 	/* sound hardware */
 	SPEAKER(config, "mono").front_center();
 

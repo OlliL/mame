@@ -254,6 +254,10 @@ channel. With the SIO in x32 mode a time constant of 2 gives 9600 baud. Which
 channel is a terminal and which a modem line is a software setting
 (`/etc/ttyconfig`, `/etc/inittab`).
 
+### Software list
+
+`hash/p8000_flop.xml` lists the floppies I have dumped: the UDOS 3.1 system disk, the OS/M 3.0 system disk, the WEGA 3.1 start disk and the WEGA 3.1 installation disks (root 1-5, usr 1-9, doc 1-2). The multi-disk sets have one part per disk, e.g. `mame p8000_16 w31start -flop2 w31root:flop1`. The images are not part of the pull request.
+
 ## 3. Testing
 
 Everything was run headless with the WEGA SD card image (`-hard sd.hd -rs232
