@@ -129,13 +129,35 @@ The P8000's UA858D reads back one less than the number of bytes transferred.
 That quirk lives in `p8k_dma_device` inside `p8k.cpp`, which overrides
 `byte_counter()`.
 
-*Evidence:* the Zilog Z80 DMA Product Specification
+*Evidence:* the German data sheet of the U858D (UA858D) DMA ("Technische
+Beschreibung", VEB Funkwerk Erfurt,
+<https://www.tiffe.de/robotron/Bausteinuebersicht/U858D-DMA.pdf>) describes
+exactly this behaviour:
+
+- section 4, p. 14: the byte counter is initialised (set to zero) only after
+  the first byte has been transferred, so it holds "unbestimmt" (undefined)
+  after the 1st byte, 0 after the 2nd and 1 after the 3rd. "Als
+  zwangsläufige Konsequenz dieser Arbeitsweise ergibt sich, daß bei
+  Übertragungen stets ein Byte mehr übertragen wird, als im
+  Blocklängenregister vereinbart wurde."
+- tables 1 and 2, p. 15: when a block ends with programmed length N, N+1 bytes
+  have been transferred and the byte counter reads N; after a stop by byte
+  match on byte M (transfer, or search in byte mode) M bytes have been
+  transferred and the counter reads M-1; in search mode with burst or
+  continuous operation M+1 bytes are transferred and the counter reads M. In
+  every row the counter is the number of transferred bytes minus one, which is
+  what `p8k_dma_device::byte_counter()` returns.
+- section 10.2, p. 30: the byte counter is read through RR1/RR2 (read mask
+  bits 1 and 2).
+
+The Zilog Z80 DMA Product Specification
 (<https://bitsavers.mirrorservice.org/components/zilog/z80/Z80_DMA_Product_Specification_Feb80.pdf>)
 only says that "the actual number of bytes transferred is one more than
-specified by the block length" and that the programmed block length is one less
-than the desired length. It does not describe the value that the byte counter
-returns when read. As with the CTC, the behaviour is taken from what the P8000
-self-test expects, which is why it is kept inside the P8000 driver.
+specified by the block length" and does not describe the value that the byte
+counter returns when read. Because the U858D data sheet documents a specific
+counter semantics and the Z80 DMA is not claimed to be identical, the quirk is
+kept inside the P8000 driver and `z80dma` only gets the neutral virtual hook.
+The P8000 monitor's hardware self-test (DMA steps) relies on this value.
 
 ### 1.4 Tests
 
