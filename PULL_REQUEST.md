@@ -126,6 +126,15 @@ is not decoded, so the SRAM shows up twice in its 4K window, and it is the same
 access to I/O 04H releases the address port. Before, every slice had its own 4K
 of "static RAM" and a control word of 0 was ignored.
 
+I checked the board against the schematics of the 8 bit board (see Sources): the
+two 74138 decoders give the I/O map in the driver (00-1F and 20-3F), the memory
+chips are what the memory model assumes (2 x 2732, 4 x 2114, 8 x 2164), the
+baud rate CTC channels clock the SIO channels through divide by two flip-flops as
+in `baud_w()`, the 9.8304 MHz baud quartz divided by eight gives the 1.2288 MHz
+CTC trigger, and the interrupt priority chain is DMA, PIO2, CTC0, SIO0, SIO1,
+PIO0, PIO1, CTC1. This is only the part of the schematic I traced; the floppy
+controller section was not compared in detail.
+
 `p8000_8` uses its own monitor EPROMs (`mon8_1_3.1_nur8bit`,
 `mon8_2_3.1_nur8bit`), because the normal ones try to start a 16 bit board that
 isn't there. `p8000_16` keeps `mon8_1_3.1` and `mon8_2_3.1`. A UDOS system floppy
@@ -285,6 +294,8 @@ what made it possible to check the emulation against the real thing:
   the real boards (<http://www.pofo.de/P8000/notes/plaene/eigene/>); they may
   contain mistakes, and the parts marked "GLE" in the 16 bit schematic are only
   on development boards;
+- the schematics, parts list and layout of the 8 bit board
+  (<http://www.pofo.de/P8000/notes/plaene/8-Bit-Rechner/>);
 - the P8000 hardware manual and the UDOS system manual;
 - the firmware sources (MON8, MON16, WDC), <https://github.com/OlliL/P8000>;
 - the WEGA kernel and driver sources and the standalone programs (`sa.format`,

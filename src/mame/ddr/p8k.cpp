@@ -10,6 +10,8 @@
     Other info from
       * http://www.pofo.de/P8000/notes/books/ (hardware manual "Hardwarehandbuch")
       * http://www.pofo.de/P8000/ (firmware, UDOS and WEGA sources)
+      * http://www.pofo.de/P8000/notes/plaene/8-Bit-Rechner/ (schematics of the
+        8 bit board P8000/8.1, Ms 889 254-2, with parts list and layout)
 
     Machines
       * p8000_8  : 8 bit board (U880 = Z80) with monitor MON8 3.1 "NUR8BIT"
@@ -48,6 +50,18 @@
       * after reset the reset flip-flop RFF is set: only the EPROM is active
         and the ADP is blocked.  A dummy IN/OUT to RES_RFF (I/O 04H) releases
         the ADP (once after reset).
+
+    8 bit board I/O decoding and clocks (schematic sheet 1, two 74138)
+      * 00-1F: ADP (00), RES_RFF (04), CTC0 (08), PIO0 (0C), latch L1 (10) and
+               L2 (14) towards the 16 bit board, PIO1 (18), PIO2 (1C)
+      * 20-3F: FDC (20), SIO0 (24), SIO1 (28), CTC1 (2C), three spare enables
+               RES1-3 (30, 34, 38), DMA (3C)
+      * Clocks: 16 MHz quartz (CPU 4 MHz, FDC), 9.8304 MHz quartz divided by
+        eight (7493) = 1.2288 MHz trigger input of the baud rate CTC channels.
+        CTC1 channels 0-2 and CTC0 channel 0 each drive a divide by two
+        flip-flop that clocks one SIO channel (SIO0 A/B, SIO1 A, SIO1 B).
+      * Interrupt priority chain: DMA, PIO2, CTC0, SIO0, SIO1, PIO0 (coupling),
+        PIO1 (X3 parallel port), CTC1.
 
     16 bit board memory: 16 KiB EPROM (0000-3FFF) and 2 KiB static RAM
     (4000-47FF, mirrored up to 5FFF) of segment 0 while the on-board memory is
