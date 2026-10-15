@@ -240,6 +240,14 @@ passes): Z80 with the bank switching, CTC/SIO/PIO daisy chain, UA858D DMA
 (`p8k_dma_device`), U8272 floppy controller and the monitor ROMs. The 8 bit
 hardware test (`T` at the monitor prompt) runs through all steps (10 to 33).
 
+**Monitor EPROMs:** the 8 bit board alone (`p8000_8`) uses its own MON8 3.1
+EPROM pair (`mon8_1_3.1_nur8bit`, `mon8_2_3.1_nur8bit`, "NUR8BIT"). Unlike the
+EPROMs of the coupled system (`mon8_1_3.1`, `mon8_2_3.1`, used by `p8000_16`)
+this monitor never tries to start or talk to a 16 bit board, which does not
+exist in that configuration (the first EPROM differs in one byte, the second in
+the code for the 16 bit coupling). A UDOS system floppy boots on `p8000_8`
+to the `%` prompt and runs `STATUS`, `DATE`, and program loading.
+
 **8 bit memory control** (hardware manual 3.3/4.3): the 64 KiB address space
 is divided into 16 slices of 4K. Each slice selects nothing, the EPROM (8 KiB,
 repeating), the 2 KiB static RAM or the 64 KiB dynamic RAM through the

@@ -12,7 +12,8 @@
       * http://www.pofo.de/P8000/ (firmware, UDOS and WEGA sources)
 
     Machines
-      * p8000_8  : 8 bit board (U880 = Z80) with monitor MON8
+      * p8000_8  : 8 bit board (U880 = Z80) with monitor MON8 3.1 "NUR8BIT"
+                   (separate EPROMs, no attempt to start a 16 bit board)
       * p8000_16 : 8 bit board plus 16 bit board (U8001 = Z8001, three
                    U8010 = Z8010 MMUs, monitor MON16).  The boards are coupled
                    through PIOs (see the "coupling" section below); the Winchester
@@ -57,7 +58,8 @@
       * Power on: the 8 bit monitor MON8 runs its self test (only after a
         power-on reset: PIO2 port A bit 7 = 1, see the DSW input), prints
         "Press RETURN" and then the prompt ">".  RETURN boots the floppy disk
-        (the boot floppy starts the 16 bit side).
+        (on p8000_16 the boot floppy starts the 16 bit side; on p8000_8 a UDOS
+        system floppy runs on the Z80 alone).
       * p8000_16 : the 16 bit software monitor asks "Press NMI"; the NMI key
         (F12) starts the 16 bit hardware check, after which the system boots
         (WEGA from the Winchester disk).  All input must be in uppercase.
@@ -1566,12 +1568,14 @@ void p8k_state::p8k_16(machine_config &config)
 
 /* ROM definition */
 ROM_START( p8000_8 )
+	// monitor MON8 3.1 for the 8 bit board alone: it does not try to talk to a 16 bit board
 	ROM_REGION( 0x2000, "maincpu", 0 )
-	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
-	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
+	ROM_LOAD("mon8_1_3.1_nur8bit",  0x0000, 0x1000, CRC(a8e97c26) SHA1(ff98f97308e5d6bea002600a8c0703642abbf0d8))
+	ROM_LOAD("mon8_2_3.1_nur8bit",  0x1000, 0x1000, CRC(060bb1b7) SHA1(123222076615cddad945afea37471af2806446b5))
 ROM_END
 
 ROM_START( p8000_16 )
+	// monitor MON8 3.1 for the coupled system (starts the 16 bit board)
 	ROM_REGION( 0x2000, "maincpu", 0 )
 	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
 	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
