@@ -417,7 +417,8 @@ U8000 monitor, Return at the primary boot loader (it loads the secondary one), a
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
 - The U130 clock module is a minimal emulation (host time, set is a no-op).
-- The printer port and the serial ports other than the console were not tested.
+- No printer port (Centronics) is emulated; the serial ports were tested only with
+  the null modem on the console, the other ports with login prompts and output (see 2.3).
 
 ## 5. Commits
 
