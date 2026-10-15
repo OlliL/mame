@@ -275,8 +275,8 @@ systems, which checks the block mapping around a bad track.
 
 - No modem is emulated, the modem lines were only switched with `ttyconfig`.
 - The clock module is minimal (host time, setting the clock does nothing).
-- Only the console has a terminal; the other ports were tested with login
-  prompts and output. The real P8000 has no parallel printer port.
+- Login prompts and output work on all serial ports, a full login with input
+  only on tty1 and tty2.
 
 ## 5. Sources
 
