@@ -133,6 +133,8 @@ public:
 		, m_pio2(*this, "pio2")
 		, m_ctc(*this, "u_ctc%u", 0U)
 		, m_sio(*this, "u_sio%u", 0U)
+		, m_sio8_0(*this, "sio")
+		, m_sio8_1(*this, "sio1")
 		, m_u_pio0(*this, "u_pio0")
 		, m_u_pio1(*this, "u_pio1")
 		, m_u_pio2(*this, "u_pio2")
@@ -140,13 +142,14 @@ public:
 		, m_u130(*this, "u130")
 		, m_i8272(*this, "i8272")
 		, m_ram(*this, "ram", 0x100000, ENDIANNESS_BIG)
-		, m_local_ram(*this, "local_ram", 0x4000, ENDIANNESS_BIG)
+		, m_local_ram(*this, "local_ram", 0x800, ENDIANNESS_BIG)
 		, m_view_code(*this, "view_code")
 		, m_view_data(*this, "view_data")
 		, m_view_stck(*this, "view_stck")
 		, m_mmu_code(*this, "mmu_code")
 		, m_mmu_data(*this, "mmu_data")
 		, m_mmu_stck(*this, "mmu_stck")
+		, m_run_led(*this, "run16")
 	{ }
 
 	void p8k(machine_config &config);
@@ -216,6 +219,8 @@ private:
 	void ram_w(address_space &space, offs_t offset, uint16_t data, uint16_t mask);
 
 	uint16_t nmiack_r();
+	void run_led_off_w(uint8_t data) { m_run_led = 0; }
+	void run_led_on_w(uint8_t data) { m_run_led = 1; }
 	uint16_t segtack_r();
 	uint16_t viack_r();
 	uint16_t nviack_r();
@@ -226,6 +231,9 @@ private:
 	void soft_reset_w(uint8_t dummy);
 
 	void install_memory(offs_t lrom_end, offs_t lram_start, offs_t lmem_end);
+	void baud_w(unsigned channel, int state);
+	uint16_t stck_lram_r(offs_t offset, uint16_t mem_mask);
+	void stck_lram_w(offs_t offset, uint16_t data, uint16_t mem_mask);
 
 	uint8_t reg_trpl_r();
 	uint8_t reg_if1l_r();
@@ -257,6 +265,9 @@ private:
 	optional_device<z80pio_device> m_pio2;        // 8 bit board
 	optional_device_array<z80ctc_device, 2> m_ctc;
 	optional_device_array<z80sio_device, 2> m_sio;
+	required_device<z80sio_device> m_sio8_0;      // 8 bit board SIOs
+	required_device<z80sio_device> m_sio8_1;
+	bool m_baud_ff[8] = { };                      // divide by two flip-flops behind the CTC zero count outputs
 	optional_device<z80pio_device> m_u_pio0;      // 16 bit board: coupling PIO (to 8 bit)
 	optional_device<z80pio_device> m_u_pio1;      // 16 bit board: coupling PIO (from 8 bit)
 	optional_device<z80pio_device> m_u_pio2;      // 16 bit board: WDC
@@ -266,13 +277,14 @@ private:
 
 	// 16-bit board
 	memory_share_creator<uint16_t> m_ram;         // external memory, 1 MiB
-	memory_share_creator<uint16_t> m_local_ram;   // on-board RAM at 4000-7FFF
+	memory_share_creator<uint16_t> m_local_ram;   // on-board static RAM, 2 KiB at 4000-47FF (mirrored up to 5FFF)
 	memory_view m_view_code;
 	memory_view m_view_data;
 	memory_view m_view_stck;
 	optional_device<z8010_device> m_mmu_code;
 	optional_device<z8010_device> m_mmu_data;
 	optional_device<z8010_device> m_mmu_stck;
+	output_finder<> m_run_led;                    // RUN lamp of the 16 bit board
 	// coupling state
 	uint8_t m_p16a = 0;               // 8 -> 16 bit data latch
 	uint8_t m_p16b = 0;               // 8 -> 16 bit status latch (bit 7 = STB, bit 0 = INT16)
@@ -284,7 +296,7 @@ private:
 
 	// Board registers
 	uint8_t m_reg_scr   = 0xf0; // System Configuration Register (bits 4-7: switches)
-	uint8_t m_reg_sbr   = 0; // System Break Register
+	uint8_t m_reg_sbr   = 0; // System Break Register (not used by the MMU selection: the OS is always segmented)
 	uint8_t m_reg_nbr   = 0; // Normal Break Register
 	uint8_t m_reg_trpl  = 0; // Segment trap memory address low-byte
 	uint8_t m_reg_if1l  = 0; // Segment trap instruction low-byte
@@ -555,8 +567,7 @@ void p8k_state::init_p8k()
 ***************************************************************************/
 
 #define CLK_CPU     XTAL(4'000'000)
-#define CLK_CTC     (2.4576_MHz_XTAL / 2)   // oscillator of the real-time clock
-#define CLK_BAUD    (2.4576_MHz_XTAL / 4)   // baud rate oscillator: ZC pulses of the CTC / 32 = 19200 / time constant
+#define CLK_CTC     (2.4576_MHz_XTAL / 2)   // 1.2288 MHz: CTC trigger input (baud rate generators, real-time clock)
 
 // System Configuration Register control bits 0-3
 #define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
@@ -564,8 +575,35 @@ void p8k_state::init_p8k()
 #define SCR_SEG_USER    0x04    // Segmented user space
 #define SCR_CLR_PARITY  0x08    // Enable NMI from parity or ECC error (not emulated)
 
+// The zero count output of a baud rate CTC channel drives a divide by two
+// flip-flop whose output is the SIO's transmit and receive clock (hardware
+// manual, "Teilerkette zur Baud-Raten Generierung").
+// 0-3: 16 bit board SIO0 A/B, SIO1 A/B; 4-7: 8 bit board SIO A/B, SIO1 A/B
+void p8k_state::baud_w(unsigned channel, int state)
+{
+	if (!state)
+		return;
+
+	m_baud_ff[channel] = !m_baud_ff[channel];
+	int const level = m_baud_ff[channel] ? 1 : 0;
+
+	z80sio_device &sio = (channel < 4) ? *m_sio[channel >> 1] : ((channel < 6) ? *m_sio8_0 : *m_sio8_1);
+	if (BIT(channel, 0))
+	{
+		sio.rxcb_w(level);
+		sio.txcb_w(level);
+	}
+	else
+	{
+		sio.rxca_w(level);
+		sio.txca_w(level);
+	}
+}
+
 void p8k_state::machine_start()
 {
+	save_item(NAME(m_baud_ff));
+
 	if (m_mmu_code)
 	{
 		install_memory(0x3fff, 0x4000, 0x7fff);
@@ -657,7 +695,9 @@ uint16_t p8k_state::nviack_r()
 uint16_t p8k_state::nmiack_r()
 {
 	mmu_instruction_end();
-	return 0xffff;
+	// NMI identifier (low nibble of the low byte, hardware manual table 3.7-4):
+	// the NMI key is the only source that is emulated, no parity errors or power fail
+	return 0x0001;
 }
 
 void p8k_state::soft_reset_w(uint8_t dummy)
@@ -788,11 +828,41 @@ void p8k_state::install_memory(offs_t lrom_end, offs_t lram_start, offs_t lmem_e
 
 	LROM = memregion("cpu16")->base();
 	LRAM = memshare("local_ram")->ptr();
+	// The static RAM is built from four 2114 (1K x 4), i.e. 2 KiB; the chip select
+	// decodes 8 KiB, so the RAM repeats up to 5FFF and nothing answers at 6000-7FFF.
+	offs_t const lram_end = lram_start + 0x7ff;
+	offs_t const lram_mirror = 0x1800;
 	m_view_code[0].install_rom(0x0000, lrom_end, LROM);
-	m_view_code[0].install_ram(lram_start, lmem_end, LRAM);
+	m_view_code[0].install_ram(lram_start, lram_end, lram_mirror, LRAM);
 	m_view_data[0].install_rom(0x0000, lrom_end, LROM);
-	m_view_data[0].install_ram(lram_start, lmem_end, LRAM);
-	m_view_stck[0].install_ram(lram_start, lmem_end, LRAM);
+	m_view_data[0].install_ram(lram_start, lram_end, lram_mirror, LRAM);
+	// every stack memory request, in the local RAM too, is counted by CTC0
+	m_view_stck[0].install_readwrite_handler(lram_start, lram_end, 0, lram_mirror, 0,
+		read16s_delegate(*this, FUNC(p8k_state::stck_lram_r)), write16s_delegate(*this, FUNC(p8k_state::stck_lram_w)));
+
+	// with the on-board memory active the main memory starts at 8000: the rest
+	// of the on-board window is empty
+	offs_t const empty_start = lram_start + 0x2000;
+	m_view_code[0].nop_readwrite(empty_start, lmem_end);
+	m_view_data[0].nop_readwrite(empty_start, lmem_end);
+	m_view_stck[0].nop_readwrite(empty_start, lmem_end);
+}
+
+uint16_t p8k_state::stck_lram_r(offs_t offset, uint16_t mem_mask)
+{
+	if (!machine().side_effects_disabled())
+	{
+		m_ctc[0]->trg3(1);
+		m_ctc[0]->trg3(0);
+	}
+	return m_local_ram[offset];
+}
+
+void p8k_state::stck_lram_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	m_ctc[0]->trg3(1);
+	m_ctc[0]->trg3(0);
+	COMBINE_DATA(&m_local_ram[offset]);
 }
 
 uint8_t p8k_state::reg_trpl_r()
@@ -924,6 +994,14 @@ bool p8k_state::translate_addr(int spacenum, bool write, offs_t &offset)
 	bool const side_effects = !machine().side_effects_disabled();
 
 	offset <<= 1;
+
+	// every stack memory request with data strobe pulses CLK/TRG3 of CTC0
+	// (IDS- OR STACKMEMREQ-); WEGA counts these for single stepping
+	if (side_effects && stack_access)
+	{
+		m_ctc[0]->trg3(1);
+		m_ctc[0]->trg3(0);
+	}
 
 	bool const code_access = (spacenum == AS_PROGRAM);
 	int const st = code_access ?
@@ -1178,9 +1256,11 @@ void p8k_state::addrmap_io(address_map &map)
 	map(0x0ffa0, 0x0ffa7).rw(FUNC(p8k_state::pio2_r), FUNC(p8k_state::pio2_w)).umask16(0x00ff);
 	map(0x0ffa8, 0x0ffaf).rw(m_ctc[0], FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
 	map(0x0ffb0, 0x0ffb7).rw(m_ctc[1], FUNC(z80ctc_device::read), FUNC(z80ctc_device::write)).umask16(0x00ff);
+	map(0x0ffb8, 0x0ffb9).w(FUNC(p8k_state::run_led_off_w)).umask16(0x00ff);   // LEDAUS: RUN lamp off
 	map(0x0ffc0, 0x0ffc1).rw(FUNC(p8k_state::reg_scr_r), FUNC(p8k_state::reg_scr_w)).umask16(0x00ff);
 	map(0x0ffc8, 0x0ffc9).rw(FUNC(p8k_state::reg_sbr_r), FUNC(p8k_state::reg_sbr_w)).umask16(0x00ff);
 	map(0x0ffd0, 0x0ffd1).rw(FUNC(p8k_state::reg_nbr_r), FUNC(p8k_state::reg_nbr_w)).umask16(0x00ff);
+	map(0x0ffd8, 0x0ffd9).w(FUNC(p8k_state::run_led_on_w)).umask16(0x00ff);   // LEDEIN: RUN lamp on
 	map(0x0ffe0, 0x0ffe1).w(m_daisy, FUNC(p8k_16_daisy_device::reti_w)).umask16(0x00ff);
 	map(0x0ffe8, 0x0ffe9).w(FUNC(p8k_state::soft_reset_w)).umask16(0x00ff);
 	map(0x0fff0, 0x0fff1).r(FUNC(p8k_state::reg_trpl_r)).umask16(0x00ff);
@@ -1251,22 +1331,18 @@ void p8k_state::p8k(machine_config &config)
 	//   CTC0 ch0 = SIO1 B (tty3); CTC0 also has the FDC and the system channel
 	ctc0.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	ctc0.set_reload_on_reset(true); // required by the monitor's hardware self-test
-	ctc0.set_clk<0>(CLK_BAUD);
-	ctc0.zc_callback<0>().set("sio1", FUNC(z80sio_device::rxcb_w));
-	ctc0.zc_callback<0>().append("sio1", FUNC(z80sio_device::txcb_w));
+	ctc0.set_clk<0>(CLK_CTC);
+	ctc0.zc_callback<0>().set([this] (int state) { baud_w(7, state); });
 
 	z80ctc_device& ctc1(Z80CTC(config, "ctc1", 1229000));    /* 1.22MHz clock */
 	ctc1.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	ctc1.set_reload_on_reset(true);
-	ctc1.set_clk<0>(CLK_BAUD);
-	ctc1.set_clk<1>(CLK_BAUD);
-	ctc1.set_clk<2>(CLK_BAUD);
-	ctc1.zc_callback<0>().set("sio", FUNC(z80sio_device::rxca_w));
-	ctc1.zc_callback<0>().append("sio", FUNC(z80sio_device::txca_w));
-	ctc1.zc_callback<1>().set("sio", FUNC(z80sio_device::rxcb_w));
-	ctc1.zc_callback<1>().append("sio", FUNC(z80sio_device::txcb_w));
-	ctc1.zc_callback<2>().set("sio1", FUNC(z80sio_device::rxca_w));
-	ctc1.zc_callback<2>().append("sio1", FUNC(z80sio_device::txca_w));
+	ctc1.set_clk<0>(CLK_CTC);
+	ctc1.set_clk<1>(CLK_CTC);
+	ctc1.set_clk<2>(CLK_CTC);
+	ctc1.zc_callback<0>().set([this] (int state) { baud_w(4, state); });
+	ctc1.zc_callback<1>().set([this] (int state) { baud_w(5, state); });
+	ctc1.zc_callback<2>().set([this] (int state) { baud_w(6, state); });
 
 	z80sio_device& sio(Z80SIO(config, "sio", 16_MHz_XTAL / 4));
 	sio.out_txda_callback().set("tty0", FUNC(rs232_port_device::write_txd));
@@ -1364,20 +1440,16 @@ void p8k_state::p8k_16(machine_config &config)
 	// outputs clock the SIO channels.
 	//   CTC0 ch0 = SIO0 A (tty4), ch1 = SIO0 B (tty5), ch2 = SIO1 A (tty6), CTC1 ch0 = SIO1 B (tty7)
 	Z80CTC(config, m_ctc[0], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-	m_ctc[0]->set_clk<0>(CLK_BAUD);
-	m_ctc[0]->set_clk<1>(CLK_BAUD);
-	m_ctc[0]->set_clk<2>(CLK_BAUD);
-	m_ctc[0]->zc_callback<0>().set(m_sio[0], FUNC(z80sio_device::rxca_w));
-	m_ctc[0]->zc_callback<0>().append(m_sio[0], FUNC(z80sio_device::txca_w));
-	m_ctc[0]->zc_callback<1>().set(m_sio[0], FUNC(z80sio_device::rxcb_w));
-	m_ctc[0]->zc_callback<1>().append(m_sio[0], FUNC(z80sio_device::txcb_w));
-	m_ctc[0]->zc_callback<2>().set(m_sio[1], FUNC(z80sio_device::rxca_w));
-	m_ctc[0]->zc_callback<2>().append(m_sio[1], FUNC(z80sio_device::txca_w));
+	m_ctc[0]->set_clk<0>(CLK_CTC);
+	m_ctc[0]->set_clk<1>(CLK_CTC);
+	m_ctc[0]->set_clk<2>(CLK_CTC);
+	m_ctc[0]->zc_callback<0>().set([this] (int state) { baud_w(0, state); });
+	m_ctc[0]->zc_callback<1>().set([this] (int state) { baud_w(1, state); });
+	m_ctc[0]->zc_callback<2>().set([this] (int state) { baud_w(2, state); });
 
 	Z80CTC(config, m_ctc[1], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
-	m_ctc[1]->set_clk<0>(CLK_BAUD);
-	m_ctc[1]->zc_callback<0>().set(m_sio[1], FUNC(z80sio_device::rxcb_w));
-	m_ctc[1]->zc_callback<0>().append(m_sio[1], FUNC(z80sio_device::txcb_w));
+	m_ctc[1]->set_clk<0>(CLK_CTC);
+	m_ctc[1]->zc_callback<0>().set([this] (int state) { baud_w(3, state); });
 	m_ctc[1]->zc_callback<2>().set(m_ctc[1], FUNC(z80ctc_device::trg3));
 
 	// Real-time (line) clock: CTC 1 channels 2 & 3 are cascaded and run in

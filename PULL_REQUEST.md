@@ -270,8 +270,22 @@ value is dropped (setting the clock is a no-op). Without a clock module the
 kernel asks for the date at boot.
 
 **System clock:** the real-time interrupt comes from CTC1: channels 2 and 3 are
-cascaded and count a 1.2288 MHz oscillator (WEGA programs /256 and /80, i.e.
+cascaded and count the 1.2288 MHz oscillator (WEGA programs /256 and /80, i.e.
 60 Hz). It is wired the same way as the System 8000 CPU board does it.
+
+**Single stepping:** CTC0 channel 3 ("Single Step Steuerung" in the hardware
+manual) counts the stack memory requests: each one pulses its CLK/TRG3 input. WEGA
+(`event.s`) arms it with a time constant of 17 (14 words of `ldm` plus the three
+of `iret`) to get an interrupt after one instruction, and the monitor's NEXT command
+counts stack operations the same way. As in `s8k_cpu.cpp` the pulse is generated in
+the address translation; the stack accesses to the on-board RAM are counted too.
+
+**On-board memory:** 16 KiB EPROM at 0000-3FFF and 2 KiB static RAM (four 2114)
+at 4000-47FF. The RAM select decodes 8 KiB, so the RAM shows up four times up to
+5FFF, and 6000-7FFF is empty; with the on-board memory active the main memory
+starts at 8000 (hardware manual 3.7.3.2, monitor RAM test: 0x400 words).
+
+**RUN lamp:** writes to FFD9 (LEDEIN) and FFB9 (LEDAUS) switch the output `run16`.
 
 **Serial ports and baud rates:** both boards have two SIOs, so with the 8 bit and
 the 16 bit board there are eight terminal channels (WEGA `sio.h`: tty0-3 on the
@@ -280,13 +294,14 @@ the 8 bit board - the 16 bit monitor reaches it through the coupling PIOs, its
 own SIO0 B is only used when the 8 bit part is inactive). Every channel has an
 RS232 port (slot names `tty0`, `rs232` = tty1, `tty2`, `tty3`, `tty4`,
 `u_rs232` = tty5, `tty6`, `tty7`); only the console has a terminal attached by
-default. As in the System 8000 the baud rates come from the CTCs: a baud rate
-oscillator (614.4 kHz) feeds the CTC trigger inputs, and the zero count outputs
-clock the SIO channels (8 bit: CTC1 ch0/1/2 = SIO0 A/B, SIO1 A, CTC0 ch0 =
-SIO1 B; 16 bit: CTC0 ch0/1/2 = SIO0 A/B, SIO1 A, CTC1 ch0 = SIO1 B). With the
-SIO in x32 mode a time constant of 2 gives 9600 baud and the WEGA table
-(`siospeed`) 19200/TC. The 1.2288 MHz oscillator is only used for the real-time
-clock. Which channel is a terminal and which a modem line is not
+default. As in the System 8000 the baud rates come from the CTCs. The hardware
+manual (figure "Teilerkette zur Baud-Raten Generierung") describes the chain: a
+9.8304 MHz crystal, a divide by 8 (1.2288 MHz) that feeds the CTC trigger inputs,
+the CTC channel as counter and a divide by two flip-flop behind each zero count
+output, which clocks the SIO channel (8 bit: CTC1 ch0/1/2 = SIO0 A/B, SIO1 A,
+CTC0 ch0 = SIO1 B; 16 bit: CTC0 ch0/1/2 = SIO0 A/B, SIO1 A, CTC1 ch0 = SIO1 B).
+With the SIO in x32 mode a time constant of 2 gives 9600 baud and the WEGA table
+(`siospeed`) 19200/TC. The same 1.2288 MHz also feeds the real-time clock. Which channel is a terminal and which a modem line is not
 hardware: `/etc/ttyconfig -t 0-7` (called from `rc_csh`) sets the modem bit of
 each channel in the kernel (`sioset`, `TIOCMCS`), and `/etc/inittab` starts a
 getty on tty0, console, tty2, tty5, tty6 and tty7 in multi-user mode (tty3 and
@@ -304,7 +319,12 @@ same I/O registers: system configuration register (FFC1), system break register
 (FFC9), normal break register (FFD1), the RETI port (FFE1), soft reset (FFE9),
 the segment trap registers (FFF1, FFF9) and the SIO/CTC/PIO block at FF81 and
 above. The P8000 firmware uses exactly these addresses (`SBREAK := %FFC9`,
-`NBREAK := %FFD1`, `RETI_P := %FFE1` in the MON16 sources), and the WEGA kernel
+`NBREAK := %FFD1`, `RETI_P := %FFE1` in the MON16 sources). The hardware manual
+lists FFC9 as unused and the schematic of the 16 bit board marks the register
+"GLE" (development version only), but the 16 bit monitor's hardware test writes
+and reads it back (error 84), so it is kept as a plain register that the MMU
+selection does not use (the operating system is always segmented). The hardware
+manual's description of the other registers matches the emulation. The WEGA kernel
 emulates RETI the same way as described in the comment of `zbi_bus_device::reti_w()`
 (it writes ED, 4D to FFE1).
 
@@ -336,7 +356,10 @@ Deliberate differences:
 - no parity/ECC NMI (the P8000 has no parity or ECC memory), no DMA mode, no segment violation register (FFD9 is the
   "RUN16" lamp output on the P8000);
 - `soft_reset_w` resets only the 16 bit board, not the whole machine; the 8 bit
-  board keeps running; `nmiack_r` returns just 0xFFFF;
+  board keeps running; `nmiack_r` returns the NMI identifier of the NMI key (0001);
+- the on-board RAM is 2 KiB (mirrored), the stack accesses pulse CTC0 CLK/TRG3
+  (single step), the baud rate chain has the divide by two flip-flops of the
+  hardware manual;
 - WDC and U130 are P8000 specific devices in their own files
   (`p8k_wdc`, `p8k_u130`); the PIO coupling sits in its own section of `p8k.cpp`.
 
