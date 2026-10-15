@@ -197,6 +197,7 @@ public:
 		, m_i8272(*this, "i8272")
 		, m_ram(*this, "ram", 0x100000, ENDIANNESS_BIG)
 		, m_local_ram(*this, "local_ram", 0x800, ENDIANNESS_BIG)
+		, m_adp_view{{*this, "adp0"}, {*this, "adp1"}, {*this, "adp2"}, {*this, "adp3"}, {*this, "adp4"}, {*this, "adp5"}, {*this, "adp6"}, {*this, "adp7"}, {*this, "adp8"}, {*this, "adp9"}, {*this, "adp10"}, {*this, "adp11"}, {*this, "adp12"}, {*this, "adp13"}, {*this, "adp14"}, {*this, "adp15"}}
 		, m_view_code(*this, "view_code")
 		, m_view_data(*this, "view_data")
 		, m_view_stck(*this, "view_stck")
@@ -204,7 +205,6 @@ public:
 		, m_mmu_data(*this, "mmu_data")
 		, m_mmu_stck(*this, "mmu_stck")
 		, m_run_led(*this, "run16")
-		, m_adp_view{{*this, "adp0"}, {*this, "adp1"}, {*this, "adp2"}, {*this, "adp3"}, {*this, "adp4"}, {*this, "adp5"}, {*this, "adp6"}, {*this, "adp7"}, {*this, "adp8"}, {*this, "adp9"}, {*this, "adp10"}, {*this, "adp11"}, {*this, "adp12"}, {*this, "adp13"}, {*this, "adp14"}, {*this, "adp15"}}
 	{ }
 
 	void p8k(machine_config &config);
