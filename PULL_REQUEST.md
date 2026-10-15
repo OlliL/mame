@@ -210,9 +210,12 @@ it), and a track in the table is not formatted.
 `p8k_u130_device` is the quartz clock module on the 16 bit board (I/O FEF1 to
 FEFF): a six digit LCD and keys that the 16 bit side reads digit by digit (see
 `timer.c` in the WEGA kernel and `sa.timer`). The emulation returns the host's
-UTC time. `sa.timer`'s correction sequence is accepted but the new value is
-dropped, so setting the clock does nothing. Without the module the kernel asks
-for the date at boot. The hardware (watch IC plus 4000 series buffers and a
+UTC time at the start. `sa.timer`'s correction sequence works: the new time
+or date only changes the module's own clock (an offset to the host time, the
+host clock is never touched), and the offset is saved in the device's NVRAM file
+like the battery of the real module keeps the time, so a reset or a restart of
+the emulation doesn't lose it. Without the module the kernel asks for the date
+at boot. The hardware (watch IC plus 4000 series buffers and a
 4035 for the keys) is described at the top of `p8k_u130.cpp`.
 
 ### Real-time clock, single step, serial ports
@@ -287,8 +290,8 @@ systems, which checks the block mapping around a bad track.
 
 ## 4. Known limitations
 
-- No modem is emulated, the modem lines were only switched with `ttyconfig`.
-- The clock module is minimal (host time, setting the clock does nothing).
+- The clock module's stop watch key (ST) and the weekday symbols are not
+  emulated, the software doesn't use them.
 
 ## 5. Sources
 

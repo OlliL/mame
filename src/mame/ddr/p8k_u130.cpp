@@ -60,25 +60,97 @@
         is 1.  The software waits a while after every write (outvalue() in
         timer.c) because the watch circuit debounces its key inputs.
 
-    In this emulation the display shows the UTC time of the host. The
-    correction sequence is accepted and shows the counting fields, but the
-    result is discarded when the correction ends (setting the clock is a nop).
+    In this emulation the module starts with the UTC time of the host. Setting
+    the time or the date changes only the module's own clock (an offset to the
+    host time, the host clock is never touched). The offset is kept in the
+    NVRAM file of the device, so a reset, or a restart of the emulation, doesn't
+    lose the setting, like the battery of the real module. The time keeps
+    running while the module is stopped for a correction only in the sense that
+    the new time is taken over the moment the clock is started again.
 
 ***************************************************************************/
 
 #include "emu.h"
 #include "p8k_u130.h"
 
+#include <algorithm>
+
 
 DEFINE_DEVICE_TYPE(P8K_U130, p8k_u130_device, "p8k_u130", "P8000 U130 clock module")
 
+namespace {
+
+// days since 1970-01-01 of a date in the proleptic Gregorian calendar
+int64_t days_from_civil(int64_t y, unsigned m, unsigned d)
+{
+	y -= (m <= 2) ? 1 : 0;
+	int64_t const era = (y >= 0 ? y : y - 399) / 400;
+	unsigned const yoe = unsigned(y - era * 400);
+	unsigned const doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+	unsigned const doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return era * 146097 + int64_t(doe) - 719468;
+}
+
+int days_in_month(int64_t year, int month) // month 1-12
+{
+	static const int days[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+	bool const leap = ((year % 4) == 0 && (year % 100) != 0) || (year % 400) == 0;
+	return days[month - 1] + ((month == 2 && leap) ? 1 : 0);
+}
+
+} // anonymous namespace
+
 p8k_u130_device::p8k_u130_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, P8K_U130, tag, owner, clock)
+	, device_nvram_interface(mconfig, *this)
 {
+}
+
+int64_t p8k_u130_device::host_time() const
+{
+	system_time st;
+	machine().current_datetime(st);
+	return st.time;
+}
+
+// the module's own time
+system_time::full_time p8k_u130_device::now() const
+{
+	return system_time(time_t(host_time() + m_offset)).utc_time;
+}
+
+void p8k_u130_device::nvram_default()
+{
+	m_offset = 0;
+}
+
+bool p8k_u130_device::nvram_read(util::read_stream &file)
+{
+	uint8_t buf[8];
+	auto const [err, actual] = util::read(file, buf, sizeof(buf));
+	if (err || actual != sizeof(buf))
+		return false;
+
+	uint64_t v = 0;
+	for (int i = 7; i >= 0; i--)
+		v = (v << 8) | buf[i];
+	m_offset = int64_t(v);
+	return true;
+}
+
+bool p8k_u130_device::nvram_write(util::write_stream &file)
+{
+	uint8_t buf[8];
+	uint64_t const v = uint64_t(m_offset);
+	for (int i = 0; i < 8; i++)
+		buf[i] = uint8_t(v >> (i * 8));
+	auto const [err, actual] = util::write(file, buf, sizeof(buf));
+	return !err && actual == sizeof(buf);
 }
 
 void p8k_u130_device::device_start()
 {
+	save_item(NAME(m_offset));
 	save_item(NAME(m_state));
 	save_item(NAME(m_date));
 	save_item(NAME(m_buttons));
@@ -127,9 +199,7 @@ void p8k_u130_device::display(uint8_t *digits, bool &date)
 	sync();
 
 	int d[6]; // digit values, rightmost first
-	system_time st;
-	machine().current_datetime(st);
-	system_time::full_time const &t = st.utc_time;
+	system_time::full_time const t = now();
 
 	if (m_state == STATE_DATE_CORR)
 	{
@@ -214,7 +284,17 @@ void p8k_u130_device::write(offs_t offset, uint8_t data)
 			break;
 
 		case STATE_DATE_CORR:
-			// end of the correction, the new date is dropped
+			// end of the correction: take over the new date, the time of day stays
+			{
+				sync();
+				system_time::full_time const t = now();
+				int64_t const cur = host_time() + m_offset;
+				int64_t const tod = ((cur % 86400) + 86400) % 86400;
+				int const month = std::clamp(int(m_v[0]), 1, 12);
+				int64_t const year = (int64_t(t.year) / 100) * 100 + m_v[3] * 10 + m_v[4];
+				int const day = std::clamp(m_v[1] * 10 + m_v[2], 1, days_in_month(year, month));
+				m_offset = days_from_civil(year, month, day) * 86400 + tod - host_time();
+			}
 			m_state = STATE_RUN;
 			m_date = false;
 			m_live = -1;
@@ -229,9 +309,7 @@ void p8k_u130_device::write(offs_t offset, uint8_t data)
 	if (BIT(rising, 0))
 	{
 		// VT (key 1)
-		system_time st;
-		machine().current_datetime(st);
-		system_time::full_time const &t = st.utc_time;
+		system_time::full_time const t = now();
 
 		switch (m_state)
 		{
@@ -278,6 +356,13 @@ void p8k_u130_device::write(offs_t offset, uint8_t data)
 				start_field(m_step - 2);
 			else if (m_step >= 6)
 			{
+				// start the clock with the new time, the date stays
+				int64_t const cur = host_time() + m_offset;
+				int64_t const day_start = cur - (((cur % 86400) + 86400) % 86400);
+				int const hour = std::clamp(int(m_v[0]), 0, 23);
+				int const minute = std::clamp(m_v[1] * 10 + m_v[2], 0, 59);
+				int const second = std::clamp(int(m_v[3]), 0, 59);
+				m_offset = day_start + hour * 3600 + minute * 60 + second - host_time();
 				m_state = STATE_RUN;
 				m_date = false;
 			}
