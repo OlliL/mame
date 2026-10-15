@@ -214,7 +214,14 @@ clock the SIO channels (8 bit: CTC1 ch0/1/2 = SIO0 A/B, SIO1 A, CTC0 ch0 =
 SIO1 B; 16 bit: CTC0 ch0/1/2 = SIO0 A/B, SIO1 A, CTC1 ch0 = SIO1 B). With the
 SIO in x32 mode a time constant of 2 gives 9600 baud and the WEGA table
 (`siospeed`) 19200/TC. The 1.2288 MHz oscillator is only used for the real-time
-clock. Tested with the WEGA login on tty0, tty1 and tty4.
+clock. Which channel is a terminal and which a modem line is not
+hardware: `/etc/ttyconfig -t 0-7` (called from `rc_csh`) sets the modem bit of
+each channel in the kernel (`sioset`, `TIOCMCS`), and `/etc/inittab` starts a
+getty on tty0, console, tty2, tty5, tty6 and tty7 in multi-user mode (tty3 and
+tty4 have none). Tested with WEGA: login prompts appear on tty0, tty1, tty2,
+tty5, tty6 and tty7; a full login (input and output) on tty1 and tty2; output
+to all eight ports (`echo > /dev/ttyN`); `ttyconfig -m 3` / `-t 3` switches tty3
+between modem and terminal.
 
 ### 2.4 Why the 16 bit board follows the System 8000 CPU board
 
@@ -287,9 +294,8 @@ All of this was run headless with the WEGA SD card image
 
 ## 4. Known limitations
 
-- Only the console (tty1) has been used interactively; tty0 and tty4 were checked
-  for the login prompt and for output from the shell, the other ports are wired
-  the same way but untested.
+- Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
+  modem was emulated.
 - Floppy access from the 16 bit side (the UDOS/WEGA start floppy path) has not
   been tested, and neither has the 8 bit board's terminal-side keyboard.
 - The WDC formatting and bad-track-table commands have not been tested.
