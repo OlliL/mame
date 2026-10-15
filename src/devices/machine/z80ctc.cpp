@@ -445,7 +445,7 @@ void z80ctc_channel_device::write(u8 data)
 		// if we're being reset, clear out any pending timers for this channel
 		if ((data & RESET) == RESET_ACTIVE)
 		{
-			// remember the present count (U857D-style clones report the time constant instead)
+			// remember the present count (optionally the time constant, as the stopped channel reloads its down counter)
 			m_down = m_device->m_reload_on_reset ? m_tconst : read();
 			m_timer->adjust(attotime::never);
 			// note that we don't clear the interrupt state here!

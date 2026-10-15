@@ -99,8 +99,10 @@ public:
 
 	u16 get_channel_constant(int ch) const { return m_channel[ch]->m_tconst; }
 
-	// Some CTC clones (e.g. the U857D in the Robotron P8000) report the time
-	// constant, not the frozen down counter, when read back after a software reset.
+	// After a software reset (STOP = 1) the down counter is continuously
+	// reloaded from the time constant (Zilog Z80-CTC schematics: LOAD DC is
+	// generated whenever STOP or TO1 = 1), so a read returns the time constant
+	// and not the frozen count.  Opt-in so that other drivers are unaffected.
 	void set_reload_on_reset(bool reload) { m_reload_on_reset = reload; }
 
 protected:

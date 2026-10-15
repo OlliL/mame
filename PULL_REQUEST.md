@@ -85,13 +85,31 @@ observed failure.
 ### 1.2 `z80ctc`: opt-in `set_reload_on_reset()`; default behaviour unchanged
 
 ```cpp
-// Some CTC clones (e.g. the U857D in the Robotron P8000) report the time
-// constant, not the frozen down counter, when read back after a software reset.
+// After a software reset (STOP = 1) the down counter is continuously
+// reloaded from the time constant, so a read returns the time constant and
+// not the frozen count.
 void set_reload_on_reset(bool reload) { m_reload_on_reset = reload; }
 ```
 
 The flag is off by default and only `p8k.cpp` sets it, so no other driver sees a
-different behaviour.
+different behaviour. The evidence below indicates that this is the behaviour of
+the original Zilog Z80 CTC as well, not a quirk of the U857D clone; the default
+was left unchanged only because other drivers could not be tested here.
+
+*Additional evidence (Zilog Z80-CTC technical manual, the circuit description
+chapter 4, printed pp. 37, 38, 44; Figs. 4-10B and 4-15):*
+
+- p. 37, Fig. 4-10B: a control word with the reset bit (D1) or the RESET input
+  sets flip-flop FF8, which generates STOP; writing the time constant clears it.
+- p. 38: after a reset "counting is resumed when a time constant is loaded".
+- p. 44, section 4.9: "In both the counter and the timer mode the down counter
+  is loaded when it reaches a zero count or when the channel stops counting or
+  timing. Transistors 86 through 90 generate the load DC signal whenever STOP or
+  TO1 = 1." (Fig. 4-15: LOAD DC = NOT(NOR(STOP, TO1))).
+
+While STOP is set, LOAD DC is therefore active and the down counter holds the
+time constant. This matches the monitor self-test and tests by other P8000
+hobbyists on U857D and Zilog parts.
 
 *Evidence:* the German data sheet of the U857D ("Technische Beschreibung
 Schaltkreis fuer Zaehler- und Zeitgeberfunktion CTC U 857 D", VEB Funkwerk
