@@ -228,6 +228,21 @@ signal captures of a real WDC 4.2. The disk is a `harddisk_image_device`, so it
 is attached with `-hard`. The controller's /ST0 line raises the interrupt used by
 the WEGA disk driver.
 
+*Bad track table (BTT):* the table is kept in the parameter sector (sector 0) as
+the byte count, up to 40 entries (cylinder high/low, head) in ascending order and
+the end mark `ff ff ff` behind the last entry. It follows the WDC firmware
+(`wdc.firm.s`: `btt_cl`, `t_btt`, `sc_def`, `f_def`), which the AVR emulator
+ignores: the clear command (0x48) leaves count 0 and the end mark at the start of
+the table (`sa.format` inserts new entries in front of the first greater entry,
+so the end mark must be right behind the last one), a track found bad while
+formatting is entered in sorted order (and only once), and PAR&BTT (0xc2) replaces
+an invalid table with an empty one. The bad tracks are skipped by the block
+commands (0x21/0x22) and the sector commands with the BTT bit (0x11/0x12): each
+requested track moves up by one for every bad track at or before it, and the
+blocks available are the total minus the bad tracks. A track in the BTT is not
+formatted. An empty table is accepted whatever follows it, so images of the AVR
+emulator keep working.
+
 **U130 clock module** (`p8k_u130_device` in `p8k_u130.cpp`; 16 bit board, I/O ports FEF1 to FEFF): a quartz clock
 with a six digit seven segment display and two keys that the 16 bit side reads
 digit by digit (see `timer.c` of the WEGA kernel and the standalone program
@@ -360,11 +375,32 @@ the FDC data register. The DMA reads and writes it with DACK, which is
 - A non-UDOS disk in drive 2 at boot makes UDOS stop with "DISK INITIALIZATION
   ERROR C4"; insert such disks after the boot.
 
+### Winchester formatting
+
+With the WEGA start floppy in drive 0: Return at the U880 monitor, NMI, `O U` at the
+U8000 monitor, Return at the primary boot loader (it loads the secondary one), and
+`ud(0,0)sa.format` at its `:` prompt, on an empty 48 MB image (`-hard`):
+
+- `sa.format` reads the controller version and the drive state ("Cyl 0 Hd 0 Sc 1 of
+  Drive 0 not readable"), offers the drive types, writes the parameter table
+  (NEC D5126: 615 cylinders, 4 heads, 18 sectors) and formats cylinder 0 head 0.
+- Two bad tracks entered by hand (cylinder 10 head 1, cylinder 20 head 3) are in the
+  BTT in sorted order after formatting all 2460 tracks; PAR&BTT is written back
+  (0xc2), and a second pass of `sa.format` finds the parameters valid.
+- `sa.verify` then lists both entries, "Blocks/Drive: 44208" and "useful Blocks of
+  Drive 0: 44172" (two tracks of 18 sectors less) and verifies the whole disk.
+- A copy of the WEGA SD image with one track of padding after cylinder 0 and the
+  entry cylinder 1 head 0 in its BTT boots WEGA and shows the same file systems
+  (`df`), which proves the block mapping around a bad track; the stock image (empty
+  BTT) boots as before.
+
 ## 4. Known limitations
 
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
-- The WDC formatting and bad-track-table commands have not been tested.
+- Real bad tracks cannot happen with a disk image: a track is only entered into the
+  BTT by hand in `sa.format` (or by a table written by the host), never because a
+  format or read fails.
 - The WDC firmware ROMs and the terminal character generator ROMs were removed from
   the ROM definitions: the controller is a software emulation that does not
   execute them, and the terminal is a serial console, so nothing uses them.

@@ -69,6 +69,8 @@ private:
 	{
 		CMD_RD_SECTOR     = 0x01,
 		CMD_WR_SECTOR     = 0x02,
+		CMD_RD_SECTOR_BTT = 0x11,
+		CMD_WR_SECTOR_BTT = 0x12,
 		CMD_RD_WDC_RAM    = 0x08,
 		CMD_FMTRD_TRACK   = 0x14,
 		CMD_WR_WDC_RAM    = 0x18,
@@ -125,12 +127,17 @@ private:
 	unsigned num_drives() const { return (m_hdd->exists() && m_hdd->get_info().sectorbytes == BLOCKLEN) ? 1 : 0; }
 	bool read_sector(uint32_t lba, uint8_t *buf);
 	bool write_sector(uint32_t lba, const uint8_t *buf);
-	bool read_blocks(uint32_t lba, unsigned count);
-	bool write_blocks(uint32_t lba, unsigned count);
+	bool read_blocks(uint32_t lba, unsigned count, bool skip_bad = false);
+	bool write_blocks(uint32_t lba, unsigned count, bool skip_bad = false);
 	uint8_t hdd_sectors() const { return m_par[18 + POS_PAR_WDC_PAR]; }
 	uint8_t hdd_heads() const { return m_par[17 + POS_PAR_WDC_PAR]; }
 	uint16_t hdd_cylinders() const { return (m_par[16 + POS_PAR_WDC_PAR] << 8) | m_par[15 + POS_PAR_WDC_PAR]; }
 	uint32_t sector2block(uint16_t cyl, uint8_t head, uint8_t sector) const;
+	unsigned btt_tracks(uint32_t *tracks) const;
+	bool is_bad_track(uint16_t cyl, uint8_t head) const;
+	void clear_btt();
+	bool btt_valid() const;
+	uint32_t skip_bad_tracks(uint32_t lba) const;
 	uint32_t p8kblock2block(uint32_t block) const { return block + uint32_t(hdd_heads()) * hdd_sectors(); }
 	uint8_t validate_block(uint32_t block) const;
 	uint8_t validate_cylhead(uint16_t cyl, uint8_t head, uint32_t block) const;

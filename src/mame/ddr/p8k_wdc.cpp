@@ -218,18 +218,20 @@ bool p8k_wdc_device::write_sector(uint32_t lba, const uint8_t *buf)
 	return num_drives() && m_hdd->write(lba, buf);
 }
 
-bool p8k_wdc_device::read_blocks(uint32_t lba, unsigned count)
+// With "skip_bad" set, the tracks of the bad track table do not count: every block is
+// mapped on its own, so a transfer can go across bad tracks.
+bool p8k_wdc_device::read_blocks(uint32_t lba, unsigned count, bool skip_bad)
 {
 	for (unsigned i = 0; i < count; i++)
-		if (!read_sector(lba + i, &m_buf[i * BLOCKLEN]))
+		if (!read_sector(skip_bad ? skip_bad_tracks(lba + i) : lba + i, &m_buf[i * BLOCKLEN]))
 			return false;
 	return true;
 }
 
-bool p8k_wdc_device::write_blocks(uint32_t lba, unsigned count)
+bool p8k_wdc_device::write_blocks(uint32_t lba, unsigned count, bool skip_bad)
 {
 	for (unsigned i = 0; i < count; i++)
-		if (!write_sector(lba + i, &m_buf[i * BLOCKLEN]))
+		if (!write_sector(skip_bad ? skip_bad_tracks(lba + i) : lba + i, &m_buf[i * BLOCKLEN]))
 			return false;
 	return true;
 }
@@ -239,28 +241,133 @@ uint32_t p8k_wdc_device::sector2block(uint16_t cyl, uint8_t head, uint8_t sector
 	return uint32_t(cyl) * hdd_heads() * hdd_sectors() + uint32_t(head) * hdd_sectors() + (sector - 1);
 }
 
+// Bad track table (BTT): byte count (16 bit, 3 per entry), then the entries (cylinder
+// high/low, head) of the tracks that are bad, sorted, and 0xff 0xff 0xff after the last one.
+// The tracks are numbered cylinder * heads + head, the entries beyond the first
+// cylinder (it holds PAR and BTT) are skipped by the P8000 block addressing.
+unsigned p8k_wdc_device::btt_tracks(uint32_t *tracks) const
+{
+	const uint8_t *btt = &m_par[POS_PAR_WDC_BTT];
+	const unsigned entries = std::min<unsigned>((btt[0] | (btt[1] << 8)) / 3, 40);
+	unsigned count = 0;
+
+	for (unsigned i = 0; i < entries; i++)
+	{
+		const unsigned cyl = (btt[2 + i * 3] << 8) | btt[3 + i * 3];
+		const unsigned head = btt[4 + i * 3];
+		if (cyl == 0 || cyl >= hdd_cylinders() || head >= hdd_heads())
+			continue;
+		tracks[count++] = cyl * hdd_heads() + head;
+	}
+
+	std::sort(tracks, tracks + count);
+	return std::unique(tracks, tracks + count) - tracks;
+}
+
+bool p8k_wdc_device::is_bad_track(uint16_t cyl, uint8_t head) const
+{
+	uint32_t tracks[40];
+	const unsigned count = btt_tracks(tracks);
+	const uint32_t track = uint32_t(cyl) * hdd_heads() + head;
+	return std::find(tracks, tracks + count, track) != tracks + count;
+}
+
+void p8k_wdc_device::clear_btt()
+{
+	std::fill_n(&m_par[POS_PAR_WDC_BTT], 125, 0x00);
+	std::fill_n(&m_par[POS_PAR_WDC_BTT + 2], 3, 0xff);
+}
+
+// The firmware (sc_def) moves a requested track up by one for every bad track which
+// is at or before it.
+uint32_t p8k_wdc_device::skip_bad_tracks(uint32_t lba) const
+{
+	uint32_t track = lba / hdd_sectors();
+	const uint32_t sector = lba % hdd_sectors();
+
+	if (m_disk_valid)
+	{
+		uint32_t tracks[40];
+		const unsigned count = btt_tracks(tracks);
+		for (unsigned i = 0; i < count; i++)
+			if (tracks[i] <= track)
+				track++;
+	}
+	return track * hdd_sectors() + sector;
+}
+
+// Checks like the firmware's t_btt: a multiple of 3 bytes, at most 40 entries, sorted
+// and inside the geometry, the end mark behind the last entry. An empty table is valid
+// whatever follows (images of the AVR emulator have no end mark).
+bool p8k_wdc_device::btt_valid() const
+{
+	const uint8_t *btt = &m_par[POS_PAR_WDC_BTT];
+	const unsigned bytes = btt[0] | (btt[1] << 8);
+	if (bytes == 0)
+		return true;
+	if (bytes % 3 || bytes > 120)
+		return false;
+
+	int last = -1;
+	for (unsigned i = 0; i < bytes; i += 3)
+	{
+		const unsigned cyl = (btt[2 + i] << 8) | btt[3 + i];
+		const unsigned head = btt[4 + i];
+		if (cyl >= hdd_cylinders() || head >= hdd_heads())
+			return false;
+		const int track = int(cyl * hdd_heads() + head);
+		if (track <= last)
+			return false;
+		last = track;
+	}
+	return btt[2 + bytes] == 0xff && btt[3 + bytes] == 0xff && btt[4 + bytes] == 0xff;
+}
+
 uint8_t p8k_wdc_device::validate_block(uint32_t block) const
 {
-	return (m_disk_valid && block > m_blocks) ? ERR_PAR_BLOCK_TO_HIGH : 0;
+	if (!m_disk_valid)
+		return 0;
+
+	// block is the P8000 block number; the bad tracks are not available
+	uint32_t tracks[40];
+	const uint32_t usable = m_blocks - btt_tracks(tracks) * hdd_sectors();
+	return (block + uint32_t(hdd_heads()) * hdd_sectors() > usable) ? ERR_PAR_BLOCK_TO_HIGH : 0;
 }
 
 uint8_t p8k_wdc_device::validate_cylhead(uint16_t cyl, uint8_t head, uint32_t block) const
 {
 	if (m_disk_valid && (cyl > hdd_cylinders() || head > hdd_heads()))
 		return ERR_PAR_BLOCK_TO_HIGH;
-	return validate_block(block);
+	return (m_disk_valid && block > m_blocks) ? ERR_PAR_BLOCK_TO_HIGH : 0;
 }
 
+// The firmware enters a bad track in sorted order; a track which is there already is
+// not entered again.
 uint8_t p8k_wdc_device::add_btt_entry(uint16_t cyl, uint8_t head)
 {
 	uint8_t *btt = &m_par[POS_PAR_WDC_BTT];
 	unsigned count = btt[0] | (btt[1] << 8);
-	if (count >= 120)
+	if (count > 39 * 3)
 		return ERR_BTT_FULL;
 
-	btt[count++ + 2] = cyl >> 8;
-	btt[count++ + 2] = uint8_t(cyl);
-	btt[count++ + 2] = head;
+	unsigned pos = 0;
+	for (; pos < count; pos += 3)
+	{
+		const unsigned c = (btt[2 + pos] << 8) | btt[3 + pos];
+		if (c > cyl || (c == cyl && btt[4 + pos] >= head))
+		{
+			if (c == cyl && btt[4 + pos] == head)
+				return 0;
+			break;
+		}
+	}
+
+	// shift the rest of the table and the end mark
+	memmove(&btt[2 + pos + 3], &btt[2 + pos], count - pos + 3);
+	btt[2 + pos] = cyl >> 8;
+	btt[3 + pos] = uint8_t(cyl);
+	btt[4 + pos] = head;
+	count += 3;
 	btt[0] = uint8_t(count);
 	btt[1] = count >> 8;
 	return 0;
@@ -349,6 +456,8 @@ void p8k_wdc_device::init_disk()
 	{
 		memcpy(m_par, sector, BLOCKLEN);
 		set_disk_valid();
+		if (!btt_valid())
+			clear_btt();
 	}
 	else
 	{
@@ -382,7 +491,8 @@ void p8k_wdc_device::execute()
 		}
 	}
 
-	const bool block_cmd = cmd == CMD_RD_BLOCK || cmd == CMD_WR_BLOCK || cmd == CMD_RD_SECTOR || cmd == CMD_WR_SECTOR;
+	const bool block_cmd = cmd == CMD_RD_BLOCK || cmd == CMD_WR_BLOCK || cmd == CMD_RD_SECTOR || cmd == CMD_WR_SECTOR
+			|| cmd == CMD_RD_SECTOR_BTT || cmd == CMD_WR_SECTOR_BTT;
 
 	// without a valid disk only maintenance commands are allowed
 	if (num_drives() > 0 && !m_disk_valid
@@ -429,11 +539,10 @@ void p8k_wdc_device::execute()
 
 	case CMD_RD_BLOCK:
 		{
-			const uint32_t block = p8kblock2block(p8kblock);
-			err = validate_block(block);
+			err = validate_block(p8kblock);
 			if (err)
 				fail(err);
-			else if (!read_blocks(block, count / BLOCKLEN))
+			else if (!read_blocks(p8kblock2block(p8kblock), count / BLOCKLEN, true))
 				fail(ERR_STANDARD);
 			else
 				start_tx(count);
@@ -465,8 +574,7 @@ void p8k_wdc_device::execute()
 		break;
 
 	case CMD_DL_BTTAB:
-		std::fill_n(&m_par[POS_PAR_WDC_BTT], 125, 0x00);
-		m_par[122 + POS_PAR_WDC_BTT] = 0xff;
+		clear_btt();
 		m_btt_cleared = true;
 		begin_busy(TM_ENTER_CMD, attotime::from_usec(100));
 		break;
@@ -531,6 +639,8 @@ void p8k_wdc_device::execute()
 
 	case CMD_ST_PARBTT:
 		set_disk_valid();
+		if (!btt_valid())
+			clear_btt();   // a bad table is replaced by an empty one, as the firmware does
 		if (!write_sector(0, m_par))
 			fail(ERR_STANDARD);
 		else
@@ -564,12 +674,13 @@ void p8k_wdc_device::execute()
 		break;
 
 	case CMD_RD_SECTOR:
+	case CMD_RD_SECTOR_BTT:
 		{
 			const uint32_t block = sector2block(cyl, m_cmd[4], m_cmd[5]);
 			err = validate_cylhead(cyl, m_cmd[4], block);
 			if (err)
 				fail(err);
-			else if (!read_blocks(block, count / BLOCKLEN))
+			else if (!read_blocks(block, count / BLOCKLEN, cmd == CMD_RD_SECTOR_BTT))
 				fail(ERR_STANDARD);
 			else
 				start_tx(count);
@@ -577,6 +688,7 @@ void p8k_wdc_device::execute()
 		break;
 
 	case CMD_WR_SECTOR:
+	case CMD_WR_SECTOR_BTT:
 		{
 			const uint32_t block = sector2block(cyl, m_cmd[4], m_cmd[5]);
 			err = validate_cylhead(cyl, m_cmd[4], block);
@@ -609,19 +721,18 @@ void p8k_wdc_device::rx_done()
 	{
 	case RX_WR_BLOCK:
 		{
-			const uint32_t block = p8kblock2block(p8kblock);
-			const uint8_t err = validate_block(block);
+			const uint8_t err = validate_block(p8kblock);
 			if (err)
 			{
 				fail(err);
 				return;
 			}
-			ok = write_blocks(block, count / BLOCKLEN);
+			ok = write_blocks(p8kblock2block(p8kblock), count / BLOCKLEN, true);
 		}
 		break;
 
 	case RX_WR_SECTOR:
-		ok = write_blocks(sector2block(cyl, m_cmd[4], m_cmd[5]), count / BLOCKLEN);
+		ok = write_blocks(sector2block(cyl, m_cmd[4], m_cmd[5]), count / BLOCKLEN, m_cmd[0] == CMD_WR_SECTOR_BTT);
 		break;
 
 	case RX_WR_WDC_RAM:
