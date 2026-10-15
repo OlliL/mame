@@ -1,8 +1,10 @@
 // license:BSD-3-Clause
-// copyright-holders:Fabio Priuli
+// copyright-holders:Oliver Lehmann
 /***************************************************************************
 
     P8000 WDC (Winchester disk controller), software emulation
+
+    Author: Oliver Lehmann <lehmann@ans-netz.de>
 
 ***************************************************************************/
 #ifndef MAME_DDR_P8K_WDC_H

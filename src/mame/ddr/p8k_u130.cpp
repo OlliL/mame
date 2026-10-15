@@ -1,8 +1,10 @@
 // license:BSD-3-Clause
-// copyright-holders:Fabio Priuli
+// copyright-holders:Oliver Lehmann
 /***************************************************************************
 
     P8000 U130 clock module
+
+    Author: Oliver Lehmann <lehmann@ans-netz.de>
 
     The module is a quartz clock with a six digit seven segment display and
     two keys. The 16 bit board reads the display digits and presses the keys

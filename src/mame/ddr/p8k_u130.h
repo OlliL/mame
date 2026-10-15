@@ -1,5 +1,12 @@
 // license:BSD-3-Clause
-// copyright-holders:Fabio Priuli
+// copyright-holders:Oliver Lehmann
+/***************************************************************************
+
+    P8000 U130 clock module
+
+    Author: Oliver Lehmann <lehmann@ans-netz.de>
+
+***************************************************************************/
 #ifndef MAME_DDR_P8K_U130_H
 #define MAME_DDR_P8K_U130_H
 

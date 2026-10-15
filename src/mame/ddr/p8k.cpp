@@ -1,14 +1,24 @@
 // license:BSD-3-Clause
-// copyright-holders:Fabio Priuli
+// copyright-holders:Fabio Priuli, Oliver Lehmann
 /***************************************************************************
 
-    P8000
+    P8000 (VEB Elektro-Apparate-Werke Berlin-Treptow, GDR)
 
-    09/2009 Skeleton driver based on Matt Knoth's emulator.
+    Author of the current driver: Oliver Lehmann <lehmann@ans-netz.de>
+    Original skeleton: 09/2009 Fabio Priuli, based on Matt Knoth's emulator.
     P8000emu (http://knothusa.net/Home.php) has been a great source of info.
     Other info from
-      * http://www.pofo.de/P8000/notes/books/
-      * http://www.pofo.de/P8000/
+      * http://www.pofo.de/P8000/notes/books/ (hardware manual "Hardwarehandbuch")
+      * http://www.pofo.de/P8000/ (firmware, UDOS and WEGA sources)
+
+    Machines
+      * p8000_8  : 8 bit board (U880 = Z80) with monitor MON8
+      * p8000_16 : 8 bit board plus 16 bit board (U8001 = Z8001, three
+                   U8010 = Z8010 MMUs, monitor MON16).  The boards are coupled
+                   through PIOs (see the "coupling" section below); the Winchester
+                   disk controller (p8k_wdc) hangs on PIO2 of the 16 bit board and
+                   the quartz clock module U130 (p8k_u130) sits in the 16 bit
+                   board's I/O space.  Operating systems: UDOS and WEGA.
 
     Emulated board revisions (P8000 Hardwarehandbuch, version marking "V: ...")
       * 8 bit board:  Index 3 ("V: x3xx", monitor MON8 3.1). Chapter 4 of the
@@ -35,26 +45,34 @@
         and the ADP is blocked.  A dummy IN/OUT to RES_RFF (I/O 04H) releases
         the ADP (once after reset).
 
-    P8000 monitor commands
-      * B : ?
-      * D : display and modify memory
-      * F : fill memory
-      * G : go to
-      * M : move (copy) memory
-      * N : dump registers
-      * O : boot from floppy
-      * P : ?
-      * Q : ?
-      * R : dump registers
-      * S : boot from floppy
-      * T : jump to ROM at CEF0
-      * X : jump to ROM at DB00
-      * return : boot from floppy disk
+    16 bit board memory: 16 KiB EPROM (0000-3FFF) and 2 KiB static RAM
+    (4000-47FF, mirrored up to 5FFF) of segment 0 while the on-board memory is
+    active, translated by the three MMUs (code, data, stack); the main memory
+    (up to 1 MiB on the memory cards) starts at 8000.
 
-    P8000_16 : All input must be in uppercase.
+    Console and boot
+      * The console is serial channel tty0 (ADM-31 terminal protocol, "-rs232
+        null_modem" with a terminal or "-bitb" socket); the other three
+        channels of each board are available as further serial ports.
+      * Power on: the 8 bit monitor MON8 runs its self test (only after a
+        power-on reset: PIO2 port A bit 7 = 1, see the DSW input), prints
+        "Press RETURN" and then the prompt ">".  RETURN boots the floppy disk
+        (the boot floppy starts the 16 bit side).
+      * p8000_16 : the 16 bit software monitor asks "Press NMI"; the NMI key
+        (F12) starts the 16 bit hardware check, after which the system boots
+        (WEGA from the Winchester disk).  All input must be in uppercase.
 
-    16 bit board: the hardware check is entered with the NMI key at the
-    "Press NMI" prompt of the softwaremonitor.
+    8 bit monitor MON8 commands (U880SM.S, upper/lower case)
+      * D : display and modify memory       * F : fill memory
+      * G : go to / get                     * M : move (copy) memory
+      * P : read/write an I/O port          * R : display and modify registers
+      * B : set a break point               * N : execute the next instruction(s)
+      * Q : quit (return to the program)    * O, S, return : boot from floppy
+      * X : start the 16 bit board: copies the coupling code from ROM
+            address 0DB00h to F000h, switches in RAM, releases the U8000 reset
+            through the coupling PIO and continues in the monitor ("XR" only
+            copies and runs it)
+      * T : 8 bit self test ("Eigentest", U880EIG.S), jump to 0CEF0h
 
 ****************************************************************************/
 
