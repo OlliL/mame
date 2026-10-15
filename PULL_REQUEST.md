@@ -258,9 +258,9 @@ register (`i8272a_device::dma_r/dma_w`). With that, Return at the U880 monitor
 boots the WEGA start floppy (`-flop1 w31start.cqm`), and under WEGA `tar` works
 in both directions on a TAR floppy, a WEGA file system floppy mounts, and
 `format` of an empty image works. MAME can't save CopyQM images, so writes only
-last until the image is unloaded; use e.g. `.mfi` to keep them. A non-UDOS disk
-in drive 2 at boot stops UDOS with "DISK INITIALIZATION ERROR C4", insert such
-disks after the boot.
+last until the image is unloaded; use e.g. `.mfi` to keep them. UDOS stops
+with "DISK INITIALIZATION ERROR C4" if drive 2 holds a non-UDOS disk at boot. The
+real P8000 does the same, so insert such disks after the boot.
 
 Winchester formatting: with the start floppy in drive 0, `ud(0,0)sa.format` on
 an empty 48 MB image reads the controller version, writes the parameter table
