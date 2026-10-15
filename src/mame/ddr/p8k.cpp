@@ -10,16 +10,28 @@
       * http://www.pofo.de/P8000/notes/books/
       * http://www.pofo.de/P8000/
 
-    P8000 memory layout
-      * divided into 3 banks of 64k
-      * bank A is for roms, only 0000-1FFF is populated
-      * bank B is for static ram, only 2000-2FFF exists
-      * bank C is for dynamic ram, all 64k is available.
-      * selection is done with OUT(c), code
-      * code = 0 for do nothing; 1 = bank A; 2 = bank B; 4 = bank C.
-      * Reg C = 0; Reg B = start address of memory that is being switched,
-        for example B = 20 indicates "bank2" in memory map, and also the
-        corresponding address in bank A/B/C.
+    Emulated board revisions (P8000 Hardwarehandbuch, version marking "V: ...")
+      * 8 bit board:  Index 3 ("V: x3xx", monitor MON8 3.1). Chapter 4 of the
+                      hardware manual.  The memory control (chapter 3.3 / 4.3)
+                      is identical on Index 1 ("V: x1xx").
+      * 16 bit board: Index 4 ("V: 4xxx", monitor MON16 3.1). Chapter 7 of the
+                      hardware manual.  An 8 bit board Index >= 3 may only be
+                      coupled with a 16 bit board Index >= 4.
+      The SBR register (FFC9) exists only on the Index 0 (development, "GLE")
+      board according to the manual; it is kept as a plain register because
+      the MON16 hardware test writes and reads it back.
+
+    P8000 8 bit board memory layout (hardware manual 3.3 / 4.3)
+      * three memory banks, each switched in steps of 4K:
+          EPROM (8 KiB, 2 x 2732, repeating), SRAM (2 KiB, A11 not decoded so
+          it appears twice in the selected 4K window), DRAM (64 KiB).
+      * the selection is stored in the write-only address port ADP
+        (16 words x 4 bit, addressed by A12..A15), written with OUT (C),r
+        to I/O 00H; register B holds the address of the 4K slice and r the
+        control word: 0 = nothing selected, 1 = EPROM, 2 = SRAM, 4 = DRAM.
+      * after reset the reset flip-flop RFF is set: only the EPROM is active
+        and the ADP is blocked.  A dummy IN/OUT to RES_RFF (I/O 04H) releases
+        the ADP (once after reset).
 
     P8000 monitor commands
       * B : ?
@@ -150,12 +162,11 @@ public:
 		, m_mmu_data(*this, "mmu_data")
 		, m_mmu_stck(*this, "mmu_stck")
 		, m_run_led(*this, "run16")
+		, m_adp_view{{*this, "adp0"}, {*this, "adp1"}, {*this, "adp2"}, {*this, "adp3"}, {*this, "adp4"}, {*this, "adp5"}, {*this, "adp6"}, {*this, "adp7"}, {*this, "adp8"}, {*this, "adp9"}, {*this, "adp10"}, {*this, "adp11"}, {*this, "adp12"}, {*this, "adp13"}, {*this, "adp14"}, {*this, "adp15"}}
 	{ }
 
 	void p8k(machine_config &config);
 	void p8k_16(machine_config &config);
-
-	void init_p8k();
 
 	DECLARE_INPUT_CHANGED_MEMBER(nmi_button);
 
@@ -165,6 +176,8 @@ protected:
 private:
 	uint8_t port0_r(offs_t offset);
 	void port0_w(offs_t offset, uint8_t data);
+	void adp_update(int slice);
+	void install_memory8();
 	DECLARE_MACHINE_RESET(p8k);
 
 	void fdc_irq(int state);
@@ -278,6 +291,12 @@ private:
 	// 16-bit board
 	memory_share_creator<uint16_t> m_ram;         // external memory, 1 MiB
 	memory_share_creator<uint16_t> m_local_ram;   // on-board static RAM, 2 KiB at 4000-47FF (mirrored up to 5FFF)
+	// 8 bit board memory control (ADP + reset flip-flop), one view per 4K slice
+	memory_view m_adp_view[16];
+	std::unique_ptr<uint8_t[]> m_dram8;   // 64 KiB dynamic RAM
+	uint8_t m_sram8[0x800];               // 2 KiB static RAM
+	uint8_t m_adp[16];                    // address port: 16 words of 4 bit
+	bool m_rff;                           // reset flip-flop
 	memory_view m_view_code;
 	memory_view m_view_data;
 	memory_view m_view_stck;
@@ -321,22 +340,7 @@ private:
 
 void p8k_state::p8k_memmap(address_map &map)
 {
-	map(0x0000, 0x0FFF).bankrw("bank0");
-	map(0x1000, 0x1FFF).bankrw("bank1");
-	map(0x2000, 0x2FFF).bankrw("bank2");
-	map(0x3000, 0x3FFF).bankrw("bank3");
-	map(0x4000, 0x4FFF).bankrw("bank4");
-	map(0x5000, 0x5FFF).bankrw("bank5");
-	map(0x6000, 0x6FFF).bankrw("bank6");
-	map(0x7000, 0x7FFF).bankrw("bank7");
-	map(0x8000, 0x8FFF).bankrw("bank8");
-	map(0x9000, 0x9FFF).bankrw("bank9");
-	map(0xA000, 0xAFFF).bankrw("bank10");
-	map(0xB000, 0xBFFF).bankrw("bank11");
-	map(0xC000, 0xCFFF).bankrw("bank12");
-	map(0xD000, 0xDFFF).bankrw("bank13");
-	map(0xE000, 0xEFFF).bankrw("bank14");
-	map(0xF000, 0xFFFF).bankrw("bank15");
+	// the 8 bit board memory is installed in install_memory8() (16 views of 4K)
 }
 
 void p8k_state::p8k_iomap(address_map &map)
@@ -360,32 +364,83 @@ void p8k_state::p8k_iomap(address_map &map)
 
 uint8_t p8k_state::port0_r(offs_t offset)
 {
+	// ADP is write-only; any access to RES_RFF (04H) resets the reset flip-flop
+	if (!machine().side_effects_disabled() && (offset & 4) && m_rff)
+	{
+		m_rff = false;
+		for (int i = 0; i < 16; i++)
+			adp_update(i);
+	}
 	return 0;
 }
 
 // see memory explanation above
 void p8k_state::port0_w(offs_t offset, uint8_t data)
 {
-	uint8_t breg = m_maincpu->state_int(Z80_B) >> 4;
-	if ((data==1) || (data==2) || (data==4))
+	if (offset & 4)
 	{
-		char banknum[8];
-		sprintf(banknum,"bank%d", breg);
-
-		offset = 0;
-		if (data==2)
-			offset = 16;
-		else
-		if (data==4)
-			offset = 32;
-
-		offset += breg;
-
-		membank(banknum)->set_entry(offset);
+		// RES_RFF: a dummy output releases the ADP (only possible once after reset)
+		port0_r(offset);
+		return;
 	}
-	else
-	if (data)
-		printf("Invalid data %X for bank %d\n",data,breg);
+
+	// WEADP: the slice is selected by the high address byte (register B) of OUT (C),r
+	const int slice = m_maincpu->state_int(Z80_B) >> 4;
+	data &= 7;
+	if (data > 4 || data == 3)
+		logerror("Invalid ADP control word %X for slice %d\n", data, slice);
+	m_adp[slice] = data;
+	adp_update(slice);
+}
+
+void p8k_state::adp_update(int slice)
+{
+	// 0 = nothing selected, 1 = EPROM, 2 = SRAM, 4 = DRAM
+	// while the reset flip-flop is set, the ADP is blocked and only the EPROM is active
+	int sel = 0;
+	if (m_rff || m_adp[slice] == 1)
+		sel = 1;
+	else if (m_adp[slice] == 2)
+		sel = 2;
+	else if (m_adp[slice] == 4)
+		sel = 3;
+	m_adp_view[slice].select(sel);
+}
+
+void p8k_state::install_memory8()
+{
+	address_space &space = m_maincpu->space(AS_PROGRAM);
+	uint8_t *rom = memregion("maincpu")->base();
+
+	m_dram8 = std::make_unique<uint8_t[]>(0x10000);
+	std::fill(std::begin(m_sram8), std::end(m_sram8), 0);
+	std::fill(std::begin(m_adp), std::end(m_adp), 0);
+	m_rff = true;
+
+	for (int i = 0; i < 16; i++)
+	{
+		const offs_t start = i * 0x1000;
+		const offs_t end = start + 0xfff;
+
+		space.install_view(start, end, m_adp_view[i]);
+
+		// no select signal active: nothing responds
+		m_adp_view[i][0].nop_readwrite(start, end);
+		// EPROM: 8 KiB (2 x 2732), A12 only decoded, repeating through the address space
+		// (the monitor copies the coupling code from 0DB00h)
+		m_adp_view[i][1].install_rom(start, end, &rom[(i & 1) * 0x1000]);
+		// SRAM: 2 KiB, A11 not decoded, so it appears twice in the 4K window
+		m_adp_view[i][2].install_ram(start, start + 0x7ff, 0x800, m_sram8);
+		// DRAM: 64 KiB
+		m_adp_view[i][3].install_ram(start, end, &m_dram8[start]);
+
+		m_adp_view[i].select(1);
+	}
+
+	save_pointer(NAME(m_dram8), 0x10000);
+	save_item(NAME(m_sram8));
+	save_item(NAME(m_adp));
+	save_item(NAME(m_rff));
 }
 
 
@@ -508,51 +563,11 @@ MACHINE_RESET_MEMBER(p8k_state,p8k)
 	if (m_cpu16)
 		board16_reset();
 
-	membank("bank0")->set_entry(0);
-	membank("bank1")->set_entry(0);
-	membank("bank2")->set_entry(0);
-	membank("bank3")->set_entry(0);
-	membank("bank4")->set_entry(0);
-	membank("bank5")->set_entry(0);
-	membank("bank6")->set_entry(0);
-	membank("bank7")->set_entry(0);
-	membank("bank8")->set_entry(0);
-	membank("bank9")->set_entry(0);
-	membank("bank10")->set_entry(0);
-	membank("bank11")->set_entry(0);
-	membank("bank12")->set_entry(0);
-	membank("bank13")->set_entry(0);
-	membank("bank14")->set_entry(0);
-	membank("bank15")->set_entry(0);
+	m_rff = true;
+	std::fill(std::begin(m_adp), std::end(m_adp), 0);
+	for (int i = 0; i < 16; i++)
+		adp_update(i);
 }
-
-void p8k_state::init_p8k()
-{
-	uint8_t *RAM = memregion("maincpu")->base();
-
-	// the two 4K monitor ROMs are not fully decoded and appear repeatedly in bank A
-	// (the monitor copies the coupling code from 0DB00h)
-	for (int i = 2; i < 16; i++)
-		memcpy(&RAM[i * 0x1000], &RAM[(i & 1) * 0x1000], 0x1000);
-
-	membank("bank0")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank1")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank2")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank3")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank4")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank5")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank6")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank7")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank8")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank9")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank10")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank11")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank12")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank13")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank14")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-	membank("bank15")->configure_entries(0, 48, &RAM[0x0000], 0x1000);
-}
-
 
 /***************************************************************************
 
@@ -602,6 +617,7 @@ void p8k_state::baud_w(unsigned channel, int state)
 
 void p8k_state::machine_start()
 {
+	install_memory8();
 	save_item(NAME(m_baud_ff));
 
 	if (m_mmu_code)
@@ -1530,13 +1546,13 @@ void p8k_state::p8k_16(machine_config &config)
 
 /* ROM definition */
 ROM_START( p8000_8 )
-	ROM_REGION( 0x30000, "maincpu", 0 )
+	ROM_REGION( 0x2000, "maincpu", 0 )
 	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
 	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
 ROM_END
 
 ROM_START( p8000_16 )
-	ROM_REGION( 0x30000, "maincpu", 0 )
+	ROM_REGION( 0x2000, "maincpu", 0 )
 	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
 	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
 
@@ -1553,5 +1569,5 @@ ROM_END
 /* Driver */
 
 //    YEAR  NAME      PARENT  COMPAT  MACHINE  INPUT  CLASS      INIT        COMPANY                   FULLNAME               FLAGS
-COMP( 1989, p8000_8,  0,      0,      p8k,     p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit Board)",  0)
-COMP( 1989, p8000_16, p8000_8, 0,     p8k_16,  p8k,   p8k_state, init_p8k,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)
+COMP( 1989, p8000_8,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)",  0)
+COMP( 1989, p8000_16, p8000_8, 0,     p8k_16,  p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)

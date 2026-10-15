@@ -204,6 +204,21 @@ the GDR (see <https://de.wikipedia.org/wiki/P8000>). A system consists of
 
 The operating systems are UDOS and WEGA (UNIX like).
 
+**Board revisions.** Several revisions of the boards were built. The emulation
+follows the P8000 hardware manual ("Hardwarehandbuch") as follows:
+
+| Board | Emulated revision | Manual chapter |
+|---|---|---|
+| 8 bit board | Index 3 (marking `V: x3xx`), monitor MON8 3.1 | 4 (the memory control, 3.3/4.3, is identical on Index 1, `V: x1xx`) |
+| 16 bit board | Index 4 (marking `V: 4xxx`), monitor MON16 3.1 | 7 |
+
+An 8 bit board Index >= 3 may only be coupled with a 16 bit board Index >= 4.
+The development ("GLE") boards and Index 0 are not emulated. According to the
+manual the system break register SBR (FFC9) exists only on the 16 bit board
+Index 0; it is kept as a plain register because the MON16 hardware test writes
+and reads it back (see 2.3). The same revisions are noted in the header comment
+of `p8k.cpp`.
+
 ### 2.2 Machines and file layout
 
 | Machine | Description |
@@ -224,6 +239,16 @@ East German hardware. `mame.lst` is updated. Both machines are no longer flagged
 passes): Z80 with the bank switching, CTC/SIO/PIO daisy chain, UA858D DMA
 (`p8k_dma_device`), U8272 floppy controller and the monitor ROMs. The 8 bit
 hardware test (`T` at the monitor prompt) runs through all steps (10 to 33).
+
+**8 bit memory control** (hardware manual 3.3/4.3): the 64 KiB address space
+is divided into 16 slices of 4K. Each slice selects nothing, the EPROM (8 KiB,
+repeating), the 2 KiB static RAM or the 64 KiB dynamic RAM through the
+write-only address port ADP (I/O 00H, slice = high address byte of
+`OUT (C),r`). The static RAM is not decoded on A11, so it appears twice in the
+selected 4K window and is the same 2 KiB in every slice. After reset the reset
+flip-flop is set: only the EPROM is visible and the ADP is blocked until a
+dummy IN/OUT to RES_RFF (I/O 04H). Previously every slice had its own 4K of
+"static RAM" and a control word of 0 was ignored.
 
 **16 bit board** (`p8000_16`): Z8001 with three Z8010 MMUs and the board's
 special logic (system/normal mode, segmented user space, break registers), the
