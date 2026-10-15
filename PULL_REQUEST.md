@@ -244,8 +244,8 @@ null_modem`).
   `ls`, `who`, `date`.
 - `sa.timer` finds the clock module, shows the host date and time and accepts a
   new one.
-- Login prompts appear on tty0, tty1, tty2, tty5, tty6 and tty7, a full login on
-  tty1 and tty2, and output works on all eight ports. `ttyconfig -m 3` / `-t 3`
+- A full login (user, password, a command) works on every port with a getty:
+  tty0, tty1, tty2, tty5, tty6 and tty7. Output works on all eight ports. `ttyconfig -m 3` / `-t 3`
   switches tty3 between modem and terminal.
 - The 16 bit console shows 7E1 parity at the first `login:` prompt. That is
   right: WEGA's getty sets up an ADM-31 (7 bit even parity) and the terminal
@@ -275,8 +275,6 @@ systems, which checks the block mapping around a bad track.
 
 - No modem is emulated, the modem lines were only switched with `ttyconfig`.
 - The clock module is minimal (host time, setting the clock does nothing).
-- Login prompts and output work on all serial ports, a full login with input
-  only on tty1 and tty2.
 
 ## 5. Sources
 
