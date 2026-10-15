@@ -1195,27 +1195,6 @@ static const z80_daisy_config p8k_16_daisy_chain[] =
 
 
 
-#if 0
-/* F4 Character Displayer */
-static const gfx_layout p8k_charlayout =
-{
-	8, 12,                  /* 8 x 12 characters */
-	256,                    /* 256 characters */
-	1,                  /* 1 bits per pixel */
-	{ 0 },                  /* no bitplanes */
-	/* x offsets */
-	{ 0, 1, 2, 3, 4, 5, 6, 7 },
-	/* y offsets */
-	{ 0*8, 1*8, 2*8, 3*8, 4*8, 5*8, 6*8, 7*8, 8*8, 9*8, 10*8, 11*8 },
-	8*16                    /* every char takes 16 bytes */
-};
-
-static GFXDECODE_START( p8k )
-	GFXDECODE_ENTRY( "chargen", 0x0000, p8k_charlayout, 0, 1 )
-GFXDECODE_END
-#endif
-
-
 /***************************************************************************
 
     Machine Drivers
@@ -1390,15 +1369,6 @@ ROM_START( p8000_8 )
 	ROM_REGION( 0x30000, "maincpu", 0 )
 	ROM_LOAD("mon8_1_3.1",  0x0000, 0x1000, CRC(ad1bb118) SHA1(2332963acd74d5d1a009d9bce8a2b108de01d2a5))
 	ROM_LOAD("mon8_2_3.1",  0x1000, 0x1000, CRC(daced7c2) SHA1(f1f778e72568961b448020fc543ed6e81bbe81b1))
-
-	// this is for the p8000's terminal, not the p8000 itself
-	ROM_REGION( 0x1000, "chargen", 0 )
-	ROM_LOAD("p8t_zs",    0x0000, 0x0800, CRC(f9321251) SHA1(a6a796b58d50ec4a416f2accc34bd76bc83f18ea))
-	ROM_LOAD("p8tdzs.2",  0x0800, 0x0800, CRC(32736503) SHA1(6a1d7c55dddc64a7d601dfdbf917ce1afaefbb0a))
-
-	ROM_REGION( 0x2000, "user1", 0 )
-	ROM_LOAD( "wdc4.2_1-2c43.bin", 0x0000, 0x1000, CRC(2646f1ee) SHA1(f62574ad57a2c8ac55c5df89256a707c0cafc0eb) )
-	ROM_LOAD( "wdc4.2_2-5d66.bin", 0x1000, 0x1000, CRC(5d496b65) SHA1(42166d7ec51fce086c65ea829d8a3d63088815ca) )
 ROM_END
 
 ROM_START( p8000_16 )
@@ -1411,15 +1381,6 @@ ROM_START( p8000_16 )
 	ROM_LOAD16_BYTE("mon16_1l_3.1_udos",   0x0001, 0x1000, CRC(e8857bdc) SHA1(f89c65cbc479101130c71806fd3ddc28e6383f12))
 	ROM_LOAD16_BYTE("mon16_2h_3.1_udos",   0x2000, 0x1000, CRC(cddf58d5) SHA1(588bad8df75b99580459c7a8e898a3396907e3a4))
 	ROM_LOAD16_BYTE("mon16_2l_3.1_udos",   0x2001, 0x1000, CRC(395ee7aa) SHA1(d72fadb1608cd0915cd5ce6440897303ac5a12a6))
-
-	// this is for the p8000's terminal, not the p8000 itself
-	ROM_REGION( 0x1000, "chargen", 0 )
-	ROM_LOAD("p8t_zs",    0x0000, 0x0800, CRC(f9321251) SHA1(a6a796b58d50ec4a416f2accc34bd76bc83f18ea))
-	ROM_LOAD("p8tdzs.2",  0x0800, 0x0800, CRC(32736503) SHA1(6a1d7c55dddc64a7d601dfdbf917ce1afaefbb0a))
-
-	ROM_REGION( 0x2000, "user1", 0 )
-	ROM_LOAD( "wdc4.2_1-2c43.bin", 0x0000, 0x1000, CRC(2646f1ee) SHA1(f62574ad57a2c8ac55c5df89256a707c0cafc0eb) )
-	ROM_LOAD( "wdc4.2_2-5d66.bin", 0x1000, 0x1000, CRC(5d496b65) SHA1(42166d7ec51fce086c65ea829d8a3d63088815ca) )
 ROM_END
 
 } // anonymous namespace

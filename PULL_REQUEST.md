@@ -279,8 +279,9 @@ All of this was run headless with the WEGA SD card image
 - Floppy access from the 16 bit side (the UDOS/WEGA start floppy path) has not
   been tested, and neither has the 8 bit board's terminal-side keyboard.
 - The WDC formatting and bad-track-table commands have not been tested.
-- The WDC firmware ROMs are kept in the ROM definitions of the original driver,
-  but the controller is a software emulation and does not execute them.
+- The WDC firmware ROMs and the terminal character generator ROMs were removed from
+  the ROM definitions: the controller is a software emulation that does not
+  execute them, and the terminal is a serial console, so nothing uses them.
 - Parity and ECC are not emulated.
 - The U130 clock module is a minimal emulation (host time, set is a no-op).
 - Both machines remain `MACHINE_NOT_WORKING` until the points above are
