@@ -280,18 +280,18 @@ systems, which checks the block mapping around a bad track.
 
 ## 5. Sources
 
-A lot of the work rests on material Oliver Lehmann collected and published or
-drew himself, which is what made it possible to check the emulation against the
-real thing:
+A lot of this rests on material I collected, published or drew myself, which is
+what made it possible to check the emulation against the real thing:
 
-- the schematic of the 16 bit board (drawn from the real board) and the
-  schematic of the U130 clock module; both may contain mistakes, and the "GLE"
-  parts of the 16 bit schematic are only on development boards;
+- the schematics of the 16 bit board and of the U130 clock module, drawn from
+  the real boards (<http://www.pofo.de/P8000/notes/plaene/eigene/>); they may
+  contain mistakes, and the parts marked "GLE" in the 16 bit schematic are only
+  on development boards;
 - the P8000 hardware manual and the UDOS system manual;
-- the firmware sources (MON8, MON16 and the WDC), <https://github.com/OlliL/P8000>;
+- the firmware sources (MON8, MON16, WDC), <https://github.com/OlliL/P8000>;
 - the WEGA kernel and driver sources and the standalone programs (`sa.format`,
   `sa.verify`, `sa.timer`, ...) in the same repository;
-- the WDC hardware emulator with its firmware sources and the signal captures
-  of a real WDC, <https://github.com/OlliL/P8000_WDC_Emulator>.
+- my WDC hardware emulator with its firmware sources and the signal captures of
+  a real WDC, <https://github.com/OlliL/P8000_WDC_Emulator>.
 
 The Z80 CTC, PIO and DMA references are named where they are used in section 1.
