@@ -225,8 +225,13 @@ CTC0 channel 3 ("Single Step Steuerung" in the manual) counts stack memory
 requests, each one pulses its CLK/TRG3 input. WEGA arms it with a time constant
 of 17 to get an interrupt after one instruction, and the monitor's NEXT command
 counts stack operations the same way. As in `s8k_cpu.cpp` the pulse is made in
-the address translation. I did not test single stepping itself, only that
-everything around it works.
+the address translation. The CTC expires during the `IRET` that enters the
+program, so the interrupt request must only reach the CPU once the next
+instruction has started, otherwise the program's first instruction is never
+executed. The 16 bit board delays a vectored interrupt request until the next
+instruction fetch (with a timer as fallback for a CPU in HALT). With that the
+monitor's `N` command steps one instruction at a time (`N 5` five, a plain
+RETURN repeats it).
 
 Both boards have two SIOs, so there are eight terminal channels (WEGA `sio.h`:
 tty0-3 on the 8 bit board, tty4-7 on the 16 bit board). The console is tty1 (SIO0

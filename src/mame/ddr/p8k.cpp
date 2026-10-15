@@ -227,6 +227,8 @@ private:
 	void p8k_daisy_interrupt(int state);
 	void p8k_dma_irq_w(int state);
 	void p8k_16_daisy_interrupt(int state);
+	void vi_deliver();
+	TIMER_CALLBACK_MEMBER(vi_timer_cb);
 	uint8_t pio2_r(offs_t offset);
 	void pio2_w(offs_t offset, uint8_t data);
 
@@ -322,6 +324,9 @@ private:
 	optional_device_array<z80sio_device, 2> m_sio;
 	required_device<z80sio_device> m_sio8_0;      // 8 bit board SIOs
 	required_device<z80sio_device> m_sio8_1;
+	emu_timer *m_vi_timer = nullptr;              // fallback for the delayed VI request
+	bool m_vi_pending = false;                    // VI request waits for the next instruction fetch
+	bool m_vi_asserted = false;                   // VI line state seen by the CPU
 	bool m_baud_ff[8] = { };                      // divide by two flip-flops behind the CTC zero count outputs
 	optional_device<z80pio_device> m_u_pio0;      // 16 bit board: coupling PIO (to 8 bit)
 	optional_device<z80pio_device> m_u_pio1;      // 16 bit board: coupling PIO (from 8 bit)
@@ -666,6 +671,9 @@ void p8k_state::machine_start()
 	{
 		install_memory(0x3fff, 0x4000, 0x7fff);
 
+		m_vi_timer = timer_alloc(FUNC(p8k_state::vi_timer_cb), this);
+		save_item(NAME(m_vi_pending));
+		save_item(NAME(m_vi_asserted));
 		save_item(NAME(m_reg_scr));
 		save_item(NAME(m_reg_sbr));
 		save_item(NAME(m_reg_nbr));
@@ -740,6 +748,7 @@ uint16_t p8k_state::viack_r()
 	uint16_t vec = m_daisy->viack_r();
 	// The ack changed the acked device's daisy state (INT -> IEO), so the VI
 	// request line must be re-evaluated
+	m_vi_asserted = false;
 	p8k_16_daisy_interrupt(CLEAR_LINE);
 	return vec;
 }
@@ -1062,6 +1071,9 @@ bool p8k_state::translate_addr(int spacenum, bool write, offs_t &offset)
 	}
 
 	bool const code_access = (spacenum == AS_PROGRAM);
+	if (side_effects && code_access && m_vi_pending && m_cpu16->is_ifetch1())
+		vi_deliver();
+
 	int const st = code_access ?
 				(m_cpu16->is_ifetch1() ?
 					z8002_device::ST_IFETCH_1 :
@@ -1334,8 +1346,41 @@ void p8k_state::addrmap_io(address_map &map)
 
 void p8k_state::p8k_16_daisy_interrupt(int state)
 {
-	// Ignore the sent device state and forward the daisy chain state instead
-	m_cpu16->set_input_line(z8001_device::VI_LINE, m_daisy->update_irq_state() ? ASSERT_LINE : CLEAR_LINE);
+	// Ignore the sent device state and forward the daisy chain state instead.
+	// A request that arrives while an instruction runs is only seen by the CPU
+	// once the next instruction has started: the single step logic relies on
+	// that (CTC0 channel 3 expires during the IRET that enters the program, and
+	// the program's first instruction must still be executed). A timer covers
+	// a CPU that sits in HALT and fetches nothing.
+	if (m_daisy->update_irq_state())
+	{
+		if (!m_vi_asserted && !m_vi_pending)
+		{
+			m_vi_pending = true;
+			m_vi_timer->adjust(attotime::from_ticks(64, CLK_CPU));
+		}
+	}
+	else
+	{
+		m_vi_pending = false;
+		m_vi_asserted = false;
+		m_vi_timer->reset();
+		m_cpu16->set_input_line(z8001_device::VI_LINE, CLEAR_LINE);
+	}
+}
+
+void p8k_state::vi_deliver()
+{
+	m_vi_pending = false;
+	m_vi_asserted = true;
+	m_vi_timer->reset();
+	m_cpu16->set_input_line(z8001_device::VI_LINE, ASSERT_LINE);
+}
+
+TIMER_CALLBACK_MEMBER(p8k_state::vi_timer_cb)
+{
+	if (m_vi_pending)
+		vi_deliver();
 }
 
 
