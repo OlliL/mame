@@ -562,7 +562,7 @@ void p8k_state::init_p8k()
 #define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
 #define SCR_MMU_ONH     0x02    // Enable MMUs (disable linear memory)
 #define SCR_SEG_USER    0x04    // Segmented user space
-#define SCR_CLR_PARITY  0x08    // Enable parity check (not emulated)
+#define SCR_CLR_PARITY  0x08    // Enable NMI from parity or ECC error (not emulated)
 
 void p8k_state::machine_start()
 {
