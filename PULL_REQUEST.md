@@ -280,7 +280,13 @@ null_modem`).
   clock module and the clock keeps running, and login as `wega` works with
   `ls`, `who`, `date`.
 - `sa.timer` finds the clock module, shows the host date and time and accepts a
-  new one.
+  new one. The setting is kept in the NVRAM file of the module, so the kernel
+  (and the date prompt at boot) shows that time on the next start.
+- A fresh install on an empty image works with the software list disks: `sa.format`,
+  `sa.verify`, `sa.mkfs`, `sa.install` (root and /usr), `/etc/new.install`, `sysgen`
+  (new kernel and boot program), reboot with plain NMI (the new boot program
+  starts `md(0,16000)wega` by itself), `mkfs`/`labelit` of /z and `df -t`. All
+  counts match a run on the real machine.
 - A full login (user, password, a command) works on every port with a getty:
   tty0, tty1, tty2, tty5, tty6 and tty7. Output works on all eight ports. `ttyconfig -m 3` / `-t 3`
   switches tty3 between modem and terminal.
