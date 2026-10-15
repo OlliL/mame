@@ -1304,13 +1304,26 @@ void p8k_state::p8k_16(machine_config &config)
 	m_daisy->set_daisy_config(p8k_16_daisy_chain);
 	m_daisy->int_cb().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
 
-	clock_device &uart_clock(CLOCK(config, "u_uart_clock", 307200));
-	uart_clock.signal_handler().set(m_sio[0], FUNC(z80sio_device::txcb_w));
-	uart_clock.signal_handler().append(m_sio[0], FUNC(z80sio_device::rxcb_w));
-
 	/* peripheral hardware */
+	// Baud rate generators (as on the System 8000 CPU board): the 1.2288 MHz
+	// oscillator is the trigger input of the CTC channels, their zero count
+	// outputs clock the SIO channels.
+	//   CTC0 ch0 = SIO0 A, ch1 = SIO0 B (console), ch2 = SIO1 A, CTC1 ch0 = SIO1 B
 	Z80CTC(config, m_ctc[0], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	m_ctc[0]->set_clk<0>(CLK_CTC);
+	m_ctc[0]->set_clk<1>(CLK_CTC);
+	m_ctc[0]->set_clk<2>(CLK_CTC);
+	m_ctc[0]->zc_callback<0>().set(m_sio[0], FUNC(z80sio_device::rxca_w));
+	m_ctc[0]->zc_callback<0>().append(m_sio[0], FUNC(z80sio_device::txca_w));
+	m_ctc[0]->zc_callback<1>().set(m_sio[0], FUNC(z80sio_device::rxcb_w));
+	m_ctc[0]->zc_callback<1>().append(m_sio[0], FUNC(z80sio_device::txcb_w));
+	m_ctc[0]->zc_callback<2>().set(m_sio[1], FUNC(z80sio_device::rxca_w));
+	m_ctc[0]->zc_callback<2>().append(m_sio[1], FUNC(z80sio_device::txca_w));
+
 	Z80CTC(config, m_ctc[1], CLK_CPU).intr_callback().set(FUNC(p8k_state::p8k_16_daisy_interrupt));
+	m_ctc[1]->set_clk<0>(CLK_CTC);
+	m_ctc[1]->zc_callback<0>().set(m_sio[1], FUNC(z80sio_device::rxcb_w));
+	m_ctc[1]->zc_callback<0>().append(m_sio[1], FUNC(z80sio_device::txcb_w));
 	m_ctc[1]->zc_callback<2>().set(m_ctc[1], FUNC(z80ctc_device::trg3));
 
 	// Real-time (line) clock: CTC 1 channels 2 & 3 are cascaded and run in

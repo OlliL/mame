@@ -201,6 +201,12 @@ kernel asks for the date at boot.
 cascaded and count a 1.2288 MHz oscillator (WEGA programs /256 and /80, i.e.
 60 Hz). It is wired the same way as the System 8000 CPU board does it.
 
+**Serial baud rates:** as on the System 8000 CPU board, the 1.2288 MHz oscillator
+is the trigger input of the CTC channels and their zero count outputs clock the
+SIO channels (CTC0 ch0/1/2 = SIO0 A/SIO0 B/SIO1 A, CTC1 ch0 = SIO1 B). The
+console (SIO0 B) therefore runs at the rate the monitor or WEGA programs
+(time constant 2, x32 = 9600 baud).
+
 ### 2.4 Why the 16 bit board follows the System 8000 CPU board
 
 The P8000's 16 bit board is, apart from a few changes, a copy of the Zilog
@@ -274,8 +280,7 @@ All of this was run headless with the WEGA SD card image
 
 - Only one terminal is exercised: the console on the 8 bit board's serial
   port. The 16 bit board has an `rs232` port for SIO0 channel B only; the other
-  serial channels are not wired, and the SIO baud rates are a fixed clock instead
-  of coming from the CTC outputs.
+  serial channels are clocked by the CTCs but have no RS232 port attached.
 - Floppy access from the 16 bit side (the UDOS/WEGA start floppy path) has not
   been tested, and neither has the 8 bit board's terminal-side keyboard.
 - The WDC formatting and bad-track-table commands have not been tested.
