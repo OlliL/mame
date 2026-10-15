@@ -353,6 +353,10 @@ the FDC data register. The DMA reads and writes it with DACK, which is
   are intact after `umount` and a new `mount` (free blocks 169 -> 167). MAME
   cannot save CopyQM images, so a write only lasts until the image is unloaded;
   use a format MAME can write (e.g. `.mfi`) to keep the result.
+- Formatting works on a new, empty image (`format /dev/rfd196ds9` from the console,
+  answer `y`): `verify` reports no error, `tar cvf`/`tar tvf` and `mkfs` + `mount`
+  + `cp` + `cmp` on the new disk succeed. A new `.mfi` image (created through the
+  image device) is saved by MAME, unlike CopyQM.
 - A non-UDOS disk in drive 2 at boot makes UDOS stop with "DISK INITIALIZATION
   ERROR C4"; insert such disks after the boot.
 
@@ -360,7 +364,6 @@ the FDC data register. The DMA reads and writes it with DACK, which is
 
 - Modem lines (carrier detect handshake) were only switched with `ttyconfig`, no
   modem was emulated.
-- Formatting floppies under WEGA has not been tested.
 - The WDC formatting and bad-track-table commands have not been tested.
 - The WDC firmware ROMs and the terminal character generator ROMs were removed from
   the ROM definitions: the controller is a software emulation that does not
