@@ -293,7 +293,7 @@ systems, which checks the block mapping around a bad track.
 ## 5. Sources
 
 A lot of this rests on material I collected, published or drew myself, which is
-what made it possible to check the emulation against the real thing:
+what made this emulation possible:
 
 - the schematics of the 16 bit board and of the U130 clock module, drawn from
   the real boards (<http://www.pofo.de/P8000/notes/plaene/eigene/>); they may
