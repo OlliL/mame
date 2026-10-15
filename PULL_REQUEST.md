@@ -29,8 +29,8 @@ driven disk I/O of WEGA working. They are small, but `Z80PIO` is used by about
 *Problem:* `m_ip` (interrupt pending) can be set while the interrupt enable
 flip-flop is cleared, for example by a mode 3 match or a strobe. The port does
 not drive INT in that state, but the acknowledge logic still picked it. On the
-P8000 the CPU received the vector of a port that never requested an interrupt
-and jumped to the wrong handler.
+P8000 the CPU received the vector of a port that did not request an interrupt
+and jumped to a wrong address.
 
 *Evidence:* Zilog Z80 PIO Product Specification
 (<https://z80.mirrors.tinycomputers.io/zip/z80piomn.pdf>):
@@ -59,7 +59,7 @@ vector; that is derived from the quotes above.
 was still being serviced (`m_ius` set), the interrupt request was dropped. The
 condition is edge triggered ("false to true"), so it was never raised again. On
 the P8000 the 16 bit board signals "INT8" to the 8 bit board this way; one lost
-edge left the 8 bit monitor and later the WEGA kernel waiting forever. Whether
+edge left the WEGA kernel hanging in its coupling loop. Whether
 INT is actually driven is already decided later by `check_interrupts()`, which
 takes `m_ius` and the daisy chain into account, so the request can safely be
 latched.
@@ -98,9 +98,8 @@ different behaviour.
 says that a channel that receives a software reset "stops counting" and that
 "a new time constant word must be written" afterwards, but it does not say what
 a read returns in between. I did not find a data sheet for the U857D (the East
-German CTC). The behaviour is what the P8000 monitor's hardware self-test
-expects (it reads the channel after a reset and compares it with the time
-constant it just wrote); the self-test passes with the flag and fails without it.
+German CTC). The behaviour is taken from what the P8000 monitor's hardware
+self-test requires; the driver sets the flag for exactly that reason.
 
 ### 1.3 `z80dma`: virtual hook only, no change in behaviour
 
@@ -146,7 +145,7 @@ the GDR (see <https://de.wikipedia.org/wiki/P8000>). A system consists of
   connected to a PIO of the 16 bit board;
 - a terminal (ADM-31 / VT100 emulation); WEGA's console is an ADM-31.
 
-The operating systems are UDOS (CP/M like, 8 bit) and WEGA (UNIX like, 16 bit).
+The operating systems are UDOS and WEGA (UNIX like).
 
 ### 2.2 Machines and file layout
 
@@ -170,15 +169,15 @@ hardware test (`T` at the monitor prompt) runs through all steps (10 to 33).
 **16 bit board** (`p8000_16`): Z8001 with three Z8010 MMUs and the board's
 special logic (system/normal mode, segmented user space, break registers), the
 on-board EPROM/RAM, two SIOs, two CTCs, three PIOs, the Z80 style daisy chain
-(see 2.5) and 1 MiB of memory. With the NMI key (F12) the 16 bit monitor runs
+(see 2.4) and the main memory. With the NMI key (F12) the 16 bit monitor runs
 its hardware test and then boots.
 
 **Coupling of the boards:** the 16 bit board's PIO0 sends to the 8 bit board
 (PIO0 port A, bit 0 of port B is "INT8"), the 8 bit board sends through two
 output latches to the 16 bit board's PIO1. The 8 bit board's PIO0 port B bit 7
 holds the 16 bit board in reset. This is what lets the 8 bit monitor start the
-16 bit CPU (`X`), what routes the 16 bit board's console to the 8 bit board's
-serial terminal, and what the WEGA kernel uses for 8 bit peripherals.
+16 bit CPU (`X`) and what carries the 16 bit board's console output to the 8 bit
+board's serial terminal.
 
 **Winchester disk controller:** emulated in software (`p8k_wdc_device`, PIO2 of
 the 16 bit board). Only the protocol visible on the PIO interface is
@@ -210,7 +209,8 @@ same I/O registers: system configuration register (FFC1), system break register
 the segment trap registers (FFF1, FFF9) and the SIO/CTC/PIO block at FF81 and
 above. The P8000 firmware uses exactly these addresses (`SBREAK := %FFC9`,
 `NBREAK := %FFD1`, `RETI_P := %FFE1` in the MON16 sources), and the WEGA kernel
-uses the same RETI trick (ED, 4D written to FFE1) as the System 8000 software.
+emulates RETI the same way as described in the comment of `zbi_bus_device::reti_w()`
+(it writes ED, 4D to FFE1).
 
 Therefore the 16 bit part of `p8k.cpp` was restructured to resemble
 `s8k_cpu.cpp` as closely as possible, so that a diff of the two files is
@@ -244,9 +244,9 @@ Deliberate differences:
 - WDC, U130 and the PIO coupling are P8000 specific and sit in their own
   sections of the file.
 
-The segment trap latches (`TRPL`, `IF1L`) and the system break register were
-added from the System 8000 version after the firmware tests showed that
-the register is read and written by the monitor.
+The segment trap latches (`TRPL`, `IF1L`) were part of the driver already; the
+system break register (FFC9) was added when the driver was aligned, because the
+16 bit monitor's hardware test reads and writes it.
 
 ## 3. Testing
 
@@ -256,8 +256,8 @@ All of this was run headless with the WEGA SD card image
 - `p8000_8`: the monitor's hardware test (`T`) runs all steps and returns to the
   monitor prompt without an error.
 - `p8000_16`: `X` at the 8 bit monitor starts the U8001; NMI starts the 16 bit
-  hardware test, which now passes all steps including the break registers,
-  and the monitor boots (`md(0,16000)wega`).
+  hardware test, which runs through its steps (40 to 73), and the monitor
+  boots (`md(0,16000)wega`).
 - WEGA 3.2 (stock kernel): boots to multi-user (`fsck` of all file systems), the
   date comes from the U130 module, the clock keeps running, login as `wega`
   works and `ls`, `who`, `date` run.
@@ -270,12 +270,13 @@ All of this was run headless with the WEGA SD card image
 
 ## 4. Known limitations
 
-- Only the console terminal (SIO0 channel B of the 16 bit board and SIO0 of
-  the 8 bit board) is connected. The other serial channels are not wired to
-  `rs232` ports, and the SIO baud rates do not come from the CTC outputs yet.
+- Only one terminal is exercised: the console on the 8 bit board's serial
+  port. The 16 bit board has an `rs232` port for SIO0 channel B only; the other
+  serial channels are not wired, and the SIO baud rates are a fixed clock instead
+  of coming from the CTC outputs.
 - Floppy access from the 16 bit side (the UDOS/WEGA start floppy path) has not
   been tested, and neither has the 8 bit board's terminal-side keyboard.
-- WDC formatting and bad-track-table commands are only partly implemented.
+- The WDC formatting and bad-track-table commands have not been tested.
 - The WDC firmware ROMs are kept in the ROM definitions of the original driver,
   but the controller is a software emulation and does not execute them.
 - Parity and ECC are not emulated.
