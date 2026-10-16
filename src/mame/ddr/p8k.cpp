@@ -98,6 +98,79 @@
         (F12) starts the 16 bit hardware check, after which the system boots
         (WEGA from the Winchester disk).  All input must be in uppercase.
 
+    Memory size (16 bit board)
+      * The driver provides 1 MiB of main memory: 16 segments of 64 KiB, which the
+        monitor reports as "MAXSEG=<0F>".  Physical addresses beyond it read as
+        FFFF and ignore writes.
+      * The Z8010 MMUs deliver 24 physical address bits (16 MiB); the segmented
+        Z8001 names 128 segments (7 bit segment number) of 64 KiB, i.e. 8 MiB, at
+        a time.
+      * The memory therefore must never fill the whole addressable range: at
+        least the last block has to be missing.  Test step 70 of MON16 (p.test.s, "Test auf externen
+        Speicher") walks the segments upwards from 0, writes the segment number
+        to offsets 8000 and FFFE of each one, reads it back, and stops at the
+        first segment where neither address reads back; the segment before it
+        is the highest (MAX_SEGNR).  If every segment up to the end of the
+        address range reads back, the segment number wraps around to the start
+        and the scan never ends: the firmware hangs in its memory test.
+
+    Installing WEGA 3.1 on an empty hard disk (software list "p8000_flop")
+      The steps follow a run on the real machine and were repeated with this
+      driver; the final "df -t" of the install log matches it block for block.
+      Console input needs 7E1: every character typed at the WEGA login and in
+      the shell must carry even parity.
+      1. Create an empty image of at least 47185920 bytes (1024 cyl x 5 heads x
+         18 sectors x 512 bytes), e.g. a CHD with
+           chdman createhd -o wega.chd -chs 1024,5,18 -ss 512
+         (a raw file made with "truncate -s 48M wega.hd" works as well).  The
+         geometry is not read from the image; it is stored on the disk by
+         sa.format.  Start "mame p8000_16 -flop1 w31start.cqm -hard wega.chd
+         -rs232 null_modem -bitb socket.127.0.0.1:5620" (the floppy images are
+         in the software list p8000_flop).  The WEGA start floppy always stays
+         in the first drive, the installation floppies go into the second.
+      2. Return at the 8 bit monitor ("Press RETURN", then ">" and Return) boots
+         the floppy and the 16 bit monitor asks "Press NMI".  Do not press NMI:
+         the hardware test would stop with error 52, because the first command
+         to the unformatted disk fails.  Type " O U" (any character stops the
+         autoboot, O U boots the UDOS floppy).  At the loader prompt ">" enter
+         "boot" and at "Boot :" the program, e.g. "ud(0,0)sa.format".
+      3. sa.format: disk type 4 (ROB K5504.50: 1024 cylinders, 5 heads, 18
+         sectors), then answers 4, y, n, a, y, y, y.
+      4. sa.verify: begin cylinder 0, end cylinder 1023 (it waits for both).
+      5. sa.mkfs: "13000" for md(0,0) (/usr) and "7000" for md(0,16000) (root).
+      6. sa.install, started twice, always from the start floppy in drive 0.
+         Date 05/30/89.  Insert the installation floppies in drive 1 only after
+         sa.install is running (a foreign disk in drive 1 at boot time makes
+         UDOS stop with error C4).  Input fd(1,0) (block 0 of floppy 1).
+         First run: output md(0,16000), disks root1-root5.  Second run: output
+         md(0,0), disks usr1-usr9.  Answer A at the directory prompts, change
+         the disk, and answer y to "next input disk" for every further disk and
+         n after the last one.
+      7. Boot the kernel by hand once ("O U", "boot", "md(0,16000)wega"), because
+         the disk has no boot program yet.  WEGA starts in single-user mode.
+         Run /etc/new.install: answer j, 4000 for /dev/tmp, 60732 for /dev/z
+         (it builds lost+found and the manual entries and runs for a long time).
+         Then "init 2"; datem asks for the date (05/30/89) and time.  The
+         message "Last known date" shows the U130 clock module's time (the
+         module is always present, see p8k_u130.cpp).
+      8. Log in as wega (password root), "cd /usr/sys/conf" and run "sysgen":
+         n (no new constants), y (new layout), 13000 /usr, 3000 /swap, 7000
+         root, 4000 /tmp, 65016 /z, Return for md5, n (no second disk), n (no
+         new version parameters), n (no new driver).  Then
+           mv /usr/sys/conf/wega /wega
+           mv /usr/sys/conf/boot /usr/boot
+           chmod 400 /wega /usr/boot
+           halt
+         and "sync;sync" in the single-user shell that follows.
+         The new boot program has "md(0,16000)wega" as its default.  (A
+         wrong result of the Z8000 DAB instruction used to make sysgen compute
+         "md(0,0)wega" here.)
+      9. Reset the machine and boot as usual: Return at the monitor, then only
+         NMI.  After the hardware test the boot program starts the kernel from
+         the disk.  After the file system checks and a login: "umount /dev/z",
+         "mkfs /dev/rz 65016", "/etc/labelit /dev/rz /z 1", "mount /dev/z /z",
+         "/etc/makelost+found /z", "rm -f /etc/new.install" and "df -t".
+
     8 bit monitor MON8 commands (U880SM.S, upper/lower case)
       * D : display and modify memory       * F : fill memory
       * G : go to / get                     * M : move (copy) memory
