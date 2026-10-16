@@ -82,8 +82,10 @@ is ignored). They now always set the flag. WEGA's `_invsdrs` writes %15 with wha
 The U8010 technical description (6.2.13, 6.2.14, 6.2.16) says: "Dem Deskriptor 63 folgt dabei
 der Deskriptor 0". The auto-incremented SAR therefore wraps from 63 to 0 instead
 of staying at 63 (and instead of staying at the last field of descriptor 63), so
-`INC_SAR()` and `INC_DSC_SAR()` now wrap. Nothing in the P8000 software depends
-on it, since it always writes the SAR before an access.
+`INC_SAR()` and `INC_DSC_SAR()` now wrap. Moore's "Z8000 Handbook" (chapter 5, p. 355,
+358) agrees: the SAR is a 6 bit register for 64 descriptors, and Table 5-3 lists
+%15/%16 as "Set All CPU-Inhibit Flags" / "Set All DMA-Inhibit Flags". Nothing in
+the P8000 software depends on it, since it always writes the SAR before an access.
 
 ### z80ctc: opt-in `set_reload_on_reset()`
 
@@ -386,6 +388,9 @@ Official documents behind the corrections in section 1 and the clocks and memory
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
   6.2.21, 6.2.22 and E.3 (SAR wraps 63 to 0; %15/%16 transfer no data and the
   data byte is arbitrary; command code table);
+- Martin L. Moore, Z8000 Handbook (Prentice-Hall), chapter 5, Z8010 MMU, p. 355
+  (SAR is 6 bits, autoincrement) and p. 358 (Table 5-3, commands %15/%16); a book
+  on the original chips, used as additional confirmation;
 - P8000 hardware manual 5.2 and the parts list of the 16 bit board (baud rate
   quartz 9.832 MHz, divided by eight = 1.229 MHz; I had assumed 9.8304 MHz);
 - U8000 CPU technical description, 3.4.2, 5.5.5-5.5.8, 6.6.2, Fig. 6.1 and 6.2
