@@ -73,9 +73,17 @@ all DMA-inhibit attribute flags) cleared the flag in all descriptors when the
 data byte was zero. The ZiLOG System 8000 Hardware Reference Manual (Table 3-2)
 and the Z8010 data sheet list these commands as "Set All CPU-Inhibit Attribute
 Flags" / "Set All DMA-Inhibit Attribute Flags" and know no command that clears
-them, and the data byte is not part of the command. They now always set the
-flag. WEGA's `_invsdrs` writes %15 with whatever is left in a register (I saw
+them, and the data byte is not part of the command. The U8010 technical
+description says the same (6.2.21/6.2.22: "Der MMU müssen dazu keine Daten
+übergeben werden", the register used as source is chosen arbitrarily, its content
+is ignored). They now always set the flag. WEGA's `_invsdrs` writes %15 with whatever is left in a register (I saw
 00, 3E and D8), which with the old behaviour cleared or set the flags at random.
+
+The U8010 technical description (6.2.13, 6.2.14, 6.2.16) says: "Dem Deskriptor 63 folgt dabei
+der Deskriptor 0". The auto-incremented SAR therefore wraps from 63 to 0 instead
+of staying at 63 (and instead of staying at the last field of descriptor 63), so
+`INC_SAR()` and `INC_DSC_SAR()` now wrap. Nothing in the P8000 software depends
+on it, since it always writes the SAR before an access.
 
 ### z80ctc: opt-in `set_reload_on_reset()`
 
@@ -349,8 +357,6 @@ behaviour is unchanged:
 - Segment word of the saved PC and its bit 15, and the wrap of the PC offset at
   FFFF: the Z8000 documents I could read do not say; MAME's behaviour was
   checked on real systems.
-- Wrap of the Z8010 SAR after the last descriptor: the data sheet only says it
-  is autoincremented.
 - Z80 PIO: an interrupt that is pending when the enable flag is cleared stays
   pending (the manual is silent, MAME is consistent with 4.3).
 - Z8010 behaviour when the base register of a segment equals the NBR: not
@@ -366,7 +372,10 @@ Official documents behind the corrections in section 1 and the clocks and memory
 - Zilog Z80 PIO Technical Manual (priority 2.0, interrupt enable 4.3, mode 3 5.3,
   IEO until RETI 6.0);
 - ZiLOG System 8000 Hardware Reference Manual, Table 3-2 (MMU special I/O);
-- Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement);
+- Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement) and the
+  U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
+  6.2.21, 6.2.22 and E.3 (SAR wraps 63 to 0; %15/%16 transfer no data and the
+  data byte is arbitrary; command code table);
 - P8000 hardware manual 5.2 and the parts list of the 16 bit board (baud rate
   quartz 9.832 MHz, divided by eight = 1.229 MHz; I had assumed 9.8304 MHz);
 - the description of the 16 MiB memory card (segment 7FH left out).

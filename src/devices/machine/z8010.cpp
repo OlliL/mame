@@ -37,8 +37,8 @@ DEFINE_DEVICE_TYPE(Z8010, z8010_device, "z8010", "Zilog Z8010 MMU")
 
 inline void z8010_device::INC_SAR()
 {
-	if (m_sar < (SDR_MAX_SEGMENTS-1))
-		++m_sar;
+	// descriptor 63 is followed by descriptor 0
+	m_sar = (m_sar + 1) & (SDR_MAX_SEGMENTS - 1);
 }
 
 //-------------------------------------------------
@@ -63,10 +63,11 @@ inline void z8010_device::INC_DSC_SAR(const uint8_t max_dsc = DSC_SDR_ATTR)
 	{
 		++m_dsc;
 	}
-	else if (m_sar < (SDR_MAX_SEGMENTS-1))
+	else
 	{
+		// descriptor 63 is followed by descriptor 0
 		m_dsc = DSC_SDR_BAH;
-		++m_sar;
+		m_sar = (m_sar + 1) & (SDR_MAX_SEGMENTS - 1);
 	}
 }
 
