@@ -8,7 +8,8 @@ ZiLOG System 8000 Hardware Reference Manual, Moore's "Z8000 Handbook").
 - Commands %15 and %16 (set all CPU-inhibit / DMA-inhibit flags) cleared the
   flags in all descriptors when the data byte was zero. The data byte is not part
   of the command (U8010 6.2.21/6.2.22; System 8000 manual table 3-2; Moore ch. 5),
-  so they now always set the flags.
+  so they now always set the flags. I checked this on a real P8000 16 bit board:
+  %15 and %16 with data byte 00 set the flags in descriptors 5 and 63.
 - The auto-incremented SAR wraps from 63 to 0 ("Dem Deskriptor 63 folgt dabei der
   Deskriptor 0", U8010 6.2.13, 6.2.14, 6.2.16). `INC_SAR()` and `INC_DSC_SAR()`
   stayed at 63.
