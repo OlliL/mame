@@ -1832,5 +1832,5 @@ ROM_END
 /* Driver */
 
 //    YEAR  NAME      PARENT  COMPAT  MACHINE  INPUT  CLASS      INIT        COMPANY                   FULLNAME               FLAGS
-COMP( 1989, p8000,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)", 0)
-COMP( 1989, p8000_16, p8000, 0,     p8k_16,  p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)
+COMP( 1989, p8000,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)", MACHINE_SUPPORTS_SAVE)
+COMP( 1989, p8000_16, p8000, 0,     p8k_16,  p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", MACHINE_SUPPORTS_SAVE)
