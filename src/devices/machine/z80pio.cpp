@@ -119,7 +119,7 @@ int z80pio_device::z80daisy_irq_ack()
 	{
 		pio_port &port = m_port[index];
 
-		if (port.m_ip)
+		if (port.m_ie && port.m_ip)
 		{
 			if (LOG) logerror("Z80PIO Port %c Interrupt Acknowledge\n", 'A' + index);
 
@@ -578,7 +578,7 @@ void z80pio_device::pio_port::write(uint8_t data)
 			break;
 		}
 
-		if (!m_match && match && !m_ius)
+		if (!m_match && match)
 		{
 			// trigger interrupt
 			m_ip = true;
