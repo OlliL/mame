@@ -415,6 +415,10 @@ Official documents behind the corrections in section 1 and the clocks and memory
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
   6.2.21, 6.2.22 and E.3 (SAR wraps 63 to 0; %15/%16 transfer no data and the
   data byte is arbitrary; command code table);
+- Leventhal, Z8000 Assembly Language Programming, chapter 13: p. 13-5/13-6 (64 descriptors,
+  limit byte in 256 byte blocks, valid blocks 0..limit), p. 13-8/13-9 (mode register),
+  p. 13-10/13-11 (Table 13-1: commands %08-%0F, %11, %13-%16, %20), p. 13-16/13-17
+  (violation type register, write warnings, fatal); additional confirmation;
 - Martin L. Moore, Z8000 Handbook (Prentice-Hall), chapter 5, Z8010 MMU, p. 355
   (SAR is 6 bits, autoincrement) and p. 358 (Table 5-3, commands %15/%16); a book
   on the original chips, used as additional confirmation;
