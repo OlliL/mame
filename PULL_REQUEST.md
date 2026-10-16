@@ -287,6 +287,10 @@ null_modem`).
   (new kernel and boot program), reboot with plain NMI (the new boot program
   starts `md(0,16000)wega` by itself), `mkfs`/`labelit` of /z and `df -t`. All
   counts match a run on the real machine.
+- The main memory is 1 MiB by default and can be set with MAME's `-ram` option
+  (`2m`, `4m`, `8m`). With 4 MiB the monitor reports `MAXSEG=<3F>`, with 8 MiB
+  `MAXSEG=<7E>`, and WEGA boots with 4022784 / 8217088 bytes of user memory.
+  8 MiB is the maximum: 16 MiB hangs the WEGA kernel's memory sizing loop.
 - A full login (user, password, a command) works on every port with a getty:
   tty0, tty1, tty2, tty5, tty6 and tty7. Output works on all eight ports. `ttyconfig -m 3` / `-t 3`
   switches tty3 between modem and terminal.

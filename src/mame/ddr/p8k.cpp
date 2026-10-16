@@ -80,7 +80,7 @@
     16 bit board memory: 16 KiB EPROM (0000-3FFF) and 2 KiB static RAM
     (4000-47FF, mirrored up to 5FFF) of segment 0 while the on-board memory is
     active, translated by the three MMUs (code, data, stack); the main memory
-    (up to 1 MiB on the memory cards) starts at 8000.
+    (1 MiB by default, up to 8 MiB with -ram) starts at 8000.
 
     Console and boot
       * The console is serial channel tty1 (SIO0 channel B, labelled CONSOLE on
