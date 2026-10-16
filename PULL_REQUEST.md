@@ -66,6 +66,21 @@ in service blocks B. `z80daisy_irq_state()` and `check_interrupts()` now stop
 at the first port under service and let ports in front of it through. The
 acknowledge and RETI handling already walked A before B and needed no change.
 
+### z8000: PC offset wraps at FFFF
+
+The instruction fetch advanced the 32 bit PC with `m_pc += 2`, so an opcode or
+operand word at offset FFFE carried into the segment number. The U8000 (Z8000
+compatible) description says that instructions and multi-byte data elements
+cannot cross segment boundaries (3.4.2) and that the offset of an indexed, base
+or relative address wraps without touching the segment number (5.5.5, 5.5.7,
+5.5.8), which the address arithmetic of the CPU core already did. Moore's
+"Z8000 Handbook" (chapter 2, p. 19) states it for the PC itself: "Any time the PC
+offset register is incremented past FFFF it will simply wrap around to 0000
+without affecting the segment register. There is no carry from the offset
+register to the segment register." The fetch now wraps the offset the same way.
+This also keeps the segment that a Z8001 in non-segmented mode takes from the PC
+intact. WEGA still boots.
+
 ### z8010: "set all inhibit" commands
 
 The special I/O commands %15 (set all CPU-inhibit attribute flags) and %16 (set
@@ -356,13 +371,6 @@ systems, which checks the block mapping around a bad track.
 Points where I found no statement in the official documents, so the existing
 behaviour is unchanged:
 
-- Wrap of the PC offset at FFFF: the U8000 (Z8000 compatible) description says
-  that instructions and multi-byte data elements cannot cross segment
-  boundaries (3.4.2) and that the offset of an indexed, base or relative
-  address wraps without touching the segment number (5.5.5, 5.5.7, 5.5.8). The
-  address arithmetic of the CPU core already does that. What a sequential
-  instruction fetch does at the end of a segment is not defined, so it is
-  unchanged.
 - Bit 15 of the saved PC segment word: the U8000 description (6.6.2, Fig. 6.1)
   says the 7-bit segment number and the 16-bit offset are saved, in the order
   identifier, FCW, PC segment, PC offset (rising addresses), and the program
@@ -384,6 +392,7 @@ Official documents behind the corrections in section 1 and the clocks and memory
 - Zilog Z80 PIO Technical Manual (priority 2.0, interrupt enable 4.3, mode 3 5.3,
   IEO until RETI 6.0);
 - ZiLOG System 8000 Hardware Reference Manual, Table 3-2 (MMU special I/O);
+- Martin L. Moore, Z8000 Handbook, chapter 2, p. 19 (PC offset wraps without carry into the segment; additional confirmation);
 - Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement) and the
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
   6.2.21, 6.2.22 and E.3 (SAR wraps 63 to 0; %15/%16 transfer no data and the
