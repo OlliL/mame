@@ -393,17 +393,20 @@ lists them and reports two tracks less (44172 useful blocks), and a second
 of padding and a bad track in its table boots WEGA and shows the same file
 systems, which checks the block mapping around a bad track.
 
+Bit 15 of the saved PC segment word: the U8000 description (6.6.2, Fig. 6.1, 6.2)
+does not say whether the "SEG" bit in front of the segment number is pushed or what
+IRET does with it. I checked it on a real P8000 16 bit board with a small program
+under MON16: a system call handler in the program status area reads the frame
+(identifier, FCW, PC segment, PC offset), flips bit 15 of the PC segment word and
+returns with IRET, four times in a row. The frames were `8000, 0000, 8000, 0000`
+(after the first call, which entered with bit 15 set), i.e. the bit is saved as the
+PC holds it and IRET loads it back unchanged. The emulation gives the same four frames.
+
 ## 4. Known limitations
 
 Points where I found no statement in the official documents, so the existing
 behaviour is unchanged:
 
-- Bit 15 of the saved PC segment word: the U8000 description (6.6.2, Fig. 6.1)
-  says the 7-bit segment number and the 16-bit offset are saved, in the order
-  identifier, FCW, PC segment, PC offset (rising addresses), and the program
-  status area (Fig. 6.2) has a "SEG" bit in front of the segment number. Nothing
-  says whether that bit is pushed or what IRET does with it, so the existing
-  behaviour is unchanged.
 - Z8010 write warnings: the U8010 description (5.2, p. 34) sets the secondary write
   warning only for a system stack access (status %9) and the fatal flag for any other
   write warning once a flag is set. The device checks system mode only, so a system
