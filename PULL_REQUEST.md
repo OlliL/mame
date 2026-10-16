@@ -257,6 +257,16 @@ whole daisy chain and is re-evaluated after an acknowledge and after RETI. The
 earlier per-device handling let the clock interrupt hide a pending disk
 interrupt.
 
+Data or stack MMU for a non-segmented user: the original circuit diagram of the
+16 bit board (Ms 889255-2, sheet 5, board index 1 and index 4, same circuit) compares
+the upper address byte with the NBR in two K531SP1P (74S85) comparators. Their
+A > B output (NBR above the address byte) selects the data MMU, anything else
+selects the stack MMU. So an address byte equal to the NBR goes to the stack MMU, as
+`select_data_mmu()` does. WEGA's `nsseg`, `getmem` and `putmem` compare with `jr ugt`
+and treat equality as data; that is off by one but harmless, because `estabur()` sets
+the NBR to the data limit plus one and never allows data and stack to touch, so that
+block is never accessed.
+
 Differences from the s8k board: no ZBI bus (the memory is on the board, and
 there are two SIOs, two CTCs, three PIOs); the operating system is always
 segmented, so only that branch of the MMU selection exists; no parity/ECC NMI
@@ -413,9 +423,6 @@ PC holds it and IRET loads it back unchanged. The emulation gives the same four 
 Points where I found no statement in the official documents, so the existing
 behaviour is unchanged:
 
-- Z8010 behaviour when the base register of a segment equals the NBR: not
-  specified, WEGA treats it as data.
-
 - The clock module's stop watch key (ST) and the weekday symbols are not
   emulated, the software doesn't use them.
 
@@ -474,6 +481,7 @@ what made this emulation possible:
   on development boards;
 - the schematics, parts list and layout of the 8 bit board
   (<http://www.pofo.de/P8000/notes/plaene/8-Bit-Rechner/>);
+- the original circuit diagrams of the 16 bit board, index 1 and index 4 (Ms 889255-2);
 - the P8000 hardware manual and the UDOS system manual;
 - the firmware sources (MON8, MON16, WDC), <https://github.com/OlliL/P8000>;
 - the WEGA kernel and driver sources and the standalone programs (`sa.format`,
