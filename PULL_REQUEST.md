@@ -361,9 +361,12 @@ behaviour is unchanged:
   address arithmetic of the CPU core already does that. What a sequential
   instruction fetch does at the end of a segment is not defined, so it is
   unchanged.
-- Bit 15 of the saved PC segment word: the program status area (Fig. 6.2) has a
-  "SEG" bit in front of the segment number, but the documents I could read do
-  not say what the CPU pushes there and what IRET does with it; unchanged.
+- Bit 15 of the saved PC segment word: the U8000 description (6.6.2, Fig. 6.1)
+  says the 7-bit segment number and the 16-bit offset are saved, in the order
+  identifier, FCW, PC segment, PC offset (rising addresses), and the program
+  status area (Fig. 6.2) has a "SEG" bit in front of the segment number. Nothing
+  says whether that bit is pushed or what IRET does with it, so the existing
+  behaviour is unchanged.
 - Z80 PIO: an interrupt that is pending when the enable flag is cleared stays
   pending (the manual is silent, MAME is consistent with 4.3).
 - Z8010 behaviour when the base register of a segment equals the NBR: not
@@ -385,8 +388,9 @@ Official documents behind the corrections in section 1 and the clocks and memory
   data byte is arbitrary; command code table);
 - P8000 hardware manual 5.2 and the parts list of the 16 bit board (baud rate
   quartz 9.832 MHz, divided by eight = 1.229 MHz; I had assumed 9.8304 MHz);
-- U8000 CPU technical description, 3.4.2, 5.5.5-5.5.8, Fig. 6.2 (segment
-  boundaries, offset arithmetic, program status area);
+- U8000 CPU technical description, 3.4.2, 5.5.5-5.5.8, 6.6.2, Fig. 6.1 and 6.2
+  (segment boundaries, offset arithmetic, saved program status, program status
+  area);
 - the description of the 16 MiB memory card (segment 7FH left out).
 
 A lot of this rests on material I collected, published or drew myself, which is
