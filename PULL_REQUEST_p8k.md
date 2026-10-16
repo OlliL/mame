@@ -31,6 +31,10 @@ The data/stack MMU selection for a non-segmented user follows the original
 circuit diagram of the 16 bit board (two 74S85 comparators on the break
 register, equality goes to the stack MMU).
 
+The ROMs of `p8000` (`mon8_*_3.1_nur8bit`) are dumps from the EPROMs of a real 8 bit
+only P8000; there is no release of them on the EAW floppies. The ROMs of `p8000_16`
+are named as the files on the EAW UDOS and WEGA start floppies.
+
 Not emulated: the stop watch and weekday symbols of the clock module.
 
 Tested: a full build, `mame -validate`, the monitor self tests of both boards,
