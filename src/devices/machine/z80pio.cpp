@@ -161,6 +161,12 @@ void z80pio_device::z80daisy_irq_reti()
 
 			// clear interrupt under service flag
 			port.m_ius = false;
+
+			// a mode 3 request that came in during the service is only passed on
+			// if the logic condition is still met after RETI (U855 description, 5.3 and 7.1)
+			if ((port.m_mode == MODE_BIT_CONTROL) && !port.m_match)
+				port.m_ip = false;
+
 			check_interrupts();
 
 			return;

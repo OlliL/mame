@@ -30,7 +30,7 @@ that the table covers against the code: no difference. Z and S are set from the
 result, P/V is not touched, as listed ("CZS---"). Combinations outside the table
 are undefined in all of these sources.
 
-### z80pio: three fixes
+### z80pio: four fixes
 
 The first two were needed for the interrupt driven coupling of the two boards and for
 WEGA's disk I/O. `Z80PIO` is used by a lot of drivers, so please look at these
@@ -75,6 +75,19 @@ Manual, 2.0, p. 4). So B being in service must not hide a request of A; only A
 in service blocks B. `z80daisy_irq_state()` and `check_interrupts()` now stop
 at the first port under service and let ports in front of it through. The
 acknowledge and RETI handling already walked A before B and needed no change.
+
+The Z80 PIO manual says nothing about two more cases, but the technical description of
+the U855D (the Z80 PIO compatible circuit, Technische Beschreibung U855 D) does:
+
+- A pending request stays pending when the enable flip-flop is cleared and is passed
+  on when it is set again, whether the event is still current or not (5.3, p. 16).
+  `z80pio` already did this, the quote only confirms it.
+- A request that comes in while the channel is in service is stored (5.3, p. 16;
+  7.1, p. 25), except in mode 3, where it is only passed on if the logic condition is
+  still met after RETI. `z80daisy_irq_reti()` now drops such a pending request
+  when the mode 3 condition is no longer true.
+- Port A has the higher priority than port B, the chain is IEI/IEO, and IEO stays low
+  from the acknowledge up to RETI (7.1, p. 25/26, picture 13).
 
 ### z8000: PC offset wraps at FFFF
 
@@ -396,8 +409,6 @@ behaviour is unchanged:
   write warning once a flag is set. The device checks system mode only, so a system
   mode write warning from a non-stack access sets SWW instead of FATL. This is a rare
   case and DMA is involved, so I left it unchanged.
-- Z80 PIO: an interrupt that is pending when the enable flag is cleared stays
-  pending (the manual is silent, MAME is consistent with 4.3).
 - Z8010 behaviour when the base register of a segment equals the NBR: not
   specified, WEGA treats it as data.
 
@@ -410,6 +421,9 @@ Official documents behind the corrections in section 1 and the clocks and memory
 
 - Zilog Z80 PIO Technical Manual (priority 2.0, interrupt enable 4.3, mode 3 5.3,
   IEO until RETI 6.0);
+- Technische Beschreibung PIO U855 D (VEB Mikroelektronik Karl Marx Erfurt), 5.3 p. 16/17 (interrupt
+  control word, pending request and enable flip-flop), 7.1 p. 25-27 (priority chain,
+  mode 3 request after RETI), picture 13;
 - ZiLOG System 8000 Hardware Reference Manual, Table 3-2 (MMU special I/O);
 - U8000 CPU description, DAB (p. 68) and Leventhal, Z8000 Assembly Language Programming, 3-167/3-168 (DAB table);
 - Leventhal, Z8000 Assembly Language Programming, chapter 12: p. 12-10 (stack frame
