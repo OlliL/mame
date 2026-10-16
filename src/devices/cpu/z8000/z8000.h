@@ -214,7 +214,6 @@ protected:
 	virtual void PUSH_PC();
 	virtual void CHANGE_FCW(uint16_t fcw);
 	inline uint32_t make_segmented_pc(uint32_t addr);
-	void restart_insn() { m_pc = (m_pc & 0xffff0000) | ((m_pc - 4) & 0xffff); } // back to the start of a 2 word block instruction, the offset wraps at 0000
 	static inline uint32_t segmented_addr(uint32_t addr);
 	inline uint32_t addr_from_reg(int regno);
 	inline void addr_to_reg(int regno, uint32_t addr);
