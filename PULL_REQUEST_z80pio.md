@@ -1,6 +1,6 @@
 # machine/z80pio: port A has priority over port B, mode 3 request dropped after RETI
 
-AI disclosure: this change was made with the help of Claude Sonnet 5.5 (Anthropic). I checked it against the documents named below and ran it on the emulator.
+AI disclosure: this change was made with the help of Claude Sonnet 5.5 (Anthropic). I, @OlliL, reviewed it myself, checked it against the documents named below and ran it on the emulator.
 
 Two changes in the interrupt logic, both from the Z80 PIO Technical Manual and
 the U855 D technical description.

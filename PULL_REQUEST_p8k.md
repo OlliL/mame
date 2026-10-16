@@ -1,7 +1,7 @@
 # ddr/p8k.cpp, machine/z80pio, z80ctc, z80dma, cpu/z8000: Emulated the P8000 16 bit board, WEGA boots
 
 AI disclosure: this work was done with the help of Claude Sonnet 5.5 (Anthropic).
-I ran and checked everything on the emulator myself, and the behaviour that is
+I, @OlliL, reviewed and ran everything on the emulator myself, and the behaviour that is
 not obvious from the documents was confirmed on a real P8000.
 
 The P8000 driver moves from `skeleton/` to `ddr/` and now emulates the 16 bit

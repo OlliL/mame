@@ -1,6 +1,6 @@
 # machine/z8010: fixes for the "set all inhibit" commands, SAR wrap, command %10 and SWW
 
-AI disclosure: this change was made with the help of Claude Sonnet 5.5 (Anthropic). I checked it against the documents named below and ran it on the emulator.
+AI disclosure: this change was made with the help of Claude Sonnet 5.5 (Anthropic). I, @OlliL, reviewed it myself, checked it against the documents named below and ran it on the emulator.
 
 Four corrections, each from the Z8010 documents (U8010 technical description,
 ZiLOG System 8000 Hardware Reference Manual, Moore's "Z8000 Handbook").

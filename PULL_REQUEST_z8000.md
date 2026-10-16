@@ -1,6 +1,6 @@
 # cpu/z8000: PC offset wraps at FFFF instead of carrying into the segment
 
-AI disclosure: this change was made with the help of Claude Sonnet 5.5 (Anthropic). I checked it against the documents named below and ran it on the emulator.
+AI disclosure: this change was made with the help of Claude Sonnet 5.5 (Anthropic). I, @OlliL, reviewed it myself, checked it against the documents named below and ran it on the emulator.
 
 The instruction fetch advanced the 32 bit PC with `m_pc += 2`, so an opcode or
 operand word at offset FFFE carried into the segment number. Instructions and
