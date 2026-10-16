@@ -479,8 +479,8 @@ private:
 	bool m_is_seg_os = true;    // the P8000 operating system is always segmented
 	bool m_is_seg_user = false;
 
-	int m_normal_mode = 0;
-	int m_dma_on = 0;
+	bool m_normal_mode = false;
+	bool m_dma_on = false;
 };
 
 /***************************************************************************
@@ -782,6 +782,8 @@ void p8k_state::machine_start()
 {
 	install_memory8();
 	save_item(NAME(m_baud_ff));
+	save_item(NAME(m_dma_int));
+	save_item(NAME(m_fdc_tc));
 
 	if (m_mmu_code)
 	{
@@ -799,6 +801,14 @@ void p8k_state::machine_start()
 		save_item(NAME(m_if1_low));
 		save_item(NAME(m_segt_state));
 		save_item(NAME(m_normal_mode));
+		save_item(NAME(m_is_seg_user));
+		save_item(NAME(m_p16a));
+		save_item(NAME(m_p16b));
+		save_item(NAME(m_ardy0));
+		save_item(NAME(m_ardy1));
+		save_item(NAME(m_u_pio0_writing));
+		save_item(NAME(m_u_pio0_a_bus));
+		save_item(NAME(m_u8000_held));
 	}
 }
 
@@ -1079,7 +1089,7 @@ void p8k_state::out_ns_cb(int state)
 {
 	LOG("%s NORMAL/SYSTEM MODE CHANGE: %d\n", machine().describe_context(), state);
 
-	m_normal_mode = state;
+	m_normal_mode = bool(state);
 }
 
 //**************************************************************************
@@ -1282,7 +1292,7 @@ void p8k_state::board16_reset()
 	m_reg_if1l = 0;
 	m_lad_low = 0;
 	m_if1_low = 0;
-	m_normal_mode = 0;
+	m_normal_mode = false;
 	m_segt_state = false;
 	m_p16a = m_p16b = 0;
 	m_u_pio0_a_bus = 0;
@@ -1797,5 +1807,5 @@ ROM_END
 /* Driver */
 
 //    YEAR  NAME      PARENT  COMPAT  MACHINE  INPUT  CLASS      INIT        COMPANY                   FULLNAME               FLAGS
-COMP( 1989, p8000,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)",  0)
+COMP( 1989, p8000,  0,      0,      p8k,     p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit Board)", 0)
 COMP( 1989, p8000_16, p8000, 0,     p8k_16,  p8k,   p8k_state, empty_init,   "EAW electronic Treptow", "P8000 (8bit and 16bit Board)", 0)
