@@ -33,7 +33,8 @@ register, equality goes to the stack MMU).
 
 The ROMs of `p8000` (`mon8_*_3.1_nur8bit`) are dumps from the EPROMs of a real 8 bit
 only P8000; there is no release of them on the EAW floppies. The ROMs of `p8000_16`
-are named as the files on the EAW UDOS and WEGA start floppies.
+(MON8 for the 8 bit board and MON16 for the 16 bit board) are named as the files on the
+EAW UDOS and WEGA start floppies.
 
 Not emulated: the stop watch and weekday symbols of the clock module.
 
