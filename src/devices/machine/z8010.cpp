@@ -429,13 +429,15 @@ z8010_device::memory_result z8010_device::translate(offs_t offset, bool write, b
 		{
 			if (m_vtype == 0)   // Primary write warning?
 				viol |= VTYPE_PWW;
-			else if ((m_vtype < VTYPE_SWW) && sys)  // Secondary write warning?
-				viol |= VTYPE_SWW;
+			else if ((m_vtype < VTYPE_SWW) && sys && (st == 0x9))  // Secondary write warning?
+				viol |= VTYPE_SWW;                  // (system stack access only, U8010 description 5.2)
 			else if (!sys)  // Fatal?
 			{
 				nsup = false;
 				viol |= VTYPE_FATL;
 			}
+			else if (st != 0x9)    // any other warning with a flag already set is fatal
+				viol |= VTYPE_FATL;
 		}
 
 		if (side_effects && viol)

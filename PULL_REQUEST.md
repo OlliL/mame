@@ -129,6 +129,12 @@ The same description (6.2.17, Table 6.2) lists command %10, "reset of MR, VTR an
 all bits of these three registers become zero, the SAR is not mentioned. The device
 did not know this command, so it is added.
 
+The U8010 description (5.2, p. 34) sets the secondary write warning (SWW) only for a
+write to the system stack (status %9, system mode) while a flag is already set; any
+other write warning in that state sets FATL. The device checked system mode only, so
+a system mode write warning from a data access set SWW instead of FATL. It now checks
+the status as well.
+
 ### z80ctc: opt-in `set_reload_on_reset()`
 
 ```cpp
@@ -407,11 +413,6 @@ PC holds it and IRET loads it back unchanged. The emulation gives the same four 
 Points where I found no statement in the official documents, so the existing
 behaviour is unchanged:
 
-- Z8010 write warnings: the U8010 description (5.2, p. 34) sets the secondary write
-  warning only for a system stack access (status %9) and the fatal flag for any other
-  write warning once a flag is set. The device checks system mode only, so a system
-  mode write warning from a non-stack access sets SWW instead of FATL. This is a rare
-  case and DMA is involved, so I left it unchanged.
 - Z8010 behaviour when the base register of a segment equals the NBR: not
   specified, WEGA treats it as data.
 
