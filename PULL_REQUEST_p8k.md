@@ -1,4 +1,4 @@
-# ddr/p8k.cpp, machine/z80pio.cpp, machine/z8010.cpp, cpu/z8000: Emulated the P8000 16 bit board, WEGA boots
+# ddr/p8k.cpp, machine/z80pio, z80ctc, z80dma, cpu/z8000: Emulated the P8000 16 bit board, WEGA boots
 
 AI disclosure: this work was done with the help of Claude Sonnet 5.5 (Anthropic).
 I ran and checked everything on the emulator myself, and the behaviour that is
@@ -12,26 +12,18 @@ module and a software list with the WEGA and UDOS floppies. With these WEGA
 installs onto an empty hard disk image and boots to a login. The 8 bit board
 alone (`p8000`) runs OS/M and UDOS.
 
-The driver needed fixes in shared devices. These are the ones that matter:
+The driver needs small changes in three shared devices, which are part of this PR:
+`z8000` DAB gave wrong results (WEGA printed `13000 + 3000` as 0), `z80pio` answered
+an interrupt acknowledge for a port that had not enabled its interrupt and lost a
+mode 3 match while the port was in service (one lost edge hangs the WEGA kernel
+in the coupling loop), `z80ctc` gets an opt-in `set_reload_on_reset()` (the
+monitor self test needs it) and `z80dma` a virtual `byte_counter()` because the
+UA858D reads back one count less than the Z80 DMA. The last two do not change
+other systems.
 
-- `z8000`: the DAB instruction gave wrong results (WEGA printed `13000 + 3000`
-  as 0), and the PC offset did not wrap at FFFF.
-- `z80pio`: a port acknowledged an interrupt it had not asked for, the mode 3
-  match was lost while the port was in service, and port A did not have
-  priority over port B.
-- `z8010`: registers %15 and %16 are always set, SAR wraps from 63 to 0, command
-  %10 resets the mode, and the system stack write warning only applies to
-  system stack accesses (U8010 description, p. 34).
-
-Two more changes add an opt-in hook and do not change other systems:
-`z80ctc` gets `set_reload_on_reset()` (the P8000 monitor self test needs the
-channels to reload on reset), and `z80dma` gets a virtual `byte_counter()`
-because the DDR UA858D reads back one count less than the Z80 DMA.
-
-I checked each device change against the U880/U855/U8000/U8010 descriptions.
-WEGA still boots to multi-user when the PIO priority, mode 3 and Z8000 PC wrap
-changes are reverted, so those are corrections I came across and can go in a
-separate PR if preferred.
+Further corrections I found on the way (Z8000 PC wrap, PIO port priority and
+mode 3 after RETI, several Z8010 commands) are not needed to boot WEGA, so they
+are separate PRs.
 
 Behaviour I could not settle from the documents I measured on a real machine,
 for example that the saved PC segment word keeps bit 15 as the PC holds it.
