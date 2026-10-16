@@ -10,8 +10,6 @@
 #ifndef MAME_DDR_P8K_WDC_H
 #define MAME_DDR_P8K_WDC_H
 
-#pragma once
-
 #include "imagedev/harddriv.h"
 
 
@@ -37,9 +35,7 @@ DECLARE_DEVICE_TYPE(P8K_WDC, p8k_wdc_device)
       7 error, one error code byte follows
 
     The command set, parameter table (PAR), bad track table (BTT) and the
-    error codes follow the behaviour of the P8000 WDC emulator by Oliver
-    Lehmann (BSD 2-clause), which was derived from signal captures of a real
-    WDC 4.2.
+    error codes follow signal captures of a real WDC 4.2.
 
 ***************************************************************************/
 

@@ -168,9 +168,7 @@
            chmod 400 /wega /usr/boot
            halt
          and "sync;sync" in the single-user shell that follows.
-         The new boot program has "md(0,16000)wega" as its default.  (A
-         wrong result of the Z8000 DAB instruction used to make sysgen compute
-         "md(0,0)wega" here.)
+         The new boot program has "md(0,16000)wega" as its default.
       9. Reset the machine and boot as usual: Return at the monitor, then only
          NMI.  After the hardware test the boot program starts the kernel from
          the disk.  After the file system checks and a login: "umount /dev/z",
@@ -192,25 +190,28 @@
 ****************************************************************************/
 
 #include "emu.h"
-#include "cpu/z80/z80.h"
-#include "machine/z80daisy.h"
-#include "cpu/z8000/z8000.h"
-#include "imagedev/floppy.h"
-#include "machine/upd765.h"
-#include "machine/z80ctc.h"
-#include "machine/z80sio.h"
-#include "machine/z80dma.h"
-#include "imagedev/harddriv.h"
-#include "machine/z80pio.h"
-#include "machine/z8010.h"
-#include "sound/beep.h"
-#include "speaker.h"
-#include "machine/clock.h"
-#include "machine/ram.h"
-#include "bus/rs232/rs232.h"
 
 #include "p8k_u130.h"
 #include "p8k_wdc.h"
+
+#include "bus/rs232/rs232.h"
+#include "cpu/z80/z80.h"
+#include "cpu/z8000/z8000.h"
+#include "imagedev/floppy.h"
+#include "imagedev/harddriv.h"
+#include "machine/clock.h"
+#include "machine/ram.h"
+#include "machine/upd765.h"
+#include "machine/z8010.h"
+#include "machine/z80ctc.h"
+#include "machine/z80daisy.h"
+#include "machine/z80dma.h"
+#include "machine/z80pio.h"
+#include "machine/z80sio.h"
+#include "sound/beep.h"
+
+#include "speaker.h"
+
 
 //#define VERBOSE 1
 #include "logmacro.h"
@@ -283,6 +284,9 @@ public:
 		, m_sio(*this, "u_sio%u", 0U)
 		, m_sio8_0(*this, "sio")
 		, m_sio8_1(*this, "sio1")
+		, m_ctc8(*this, "ctc%u", 0U)
+		, m_pio1(*this, "pio1")
+		, m_dma(*this, "dma")
 		, m_u_pio0(*this, "u_pio0")
 		, m_u_pio1(*this, "u_pio1")
 		, m_u_pio2(*this, "u_pio2")
@@ -308,13 +312,13 @@ public:
 
 protected:
 	virtual void machine_start() override ATTR_COLD;
+	virtual void machine_reset() override ATTR_COLD;
 
 private:
 	uint8_t port0_r(offs_t offset);
 	void port0_w(offs_t offset, uint8_t data);
 	void adp_update(int slice);
 	void install_memory8();
-	DECLARE_MACHINE_RESET(p8k);
 
 	void fdc_irq(int state);
 	void fdc_motor_w(uint8_t data);
@@ -353,7 +357,6 @@ private:
 	void io_write_byte(offs_t offset, uint8_t data);
 
 	// 16-bit board, a copy of the System 8000 CPU-A board (see s8k_cpu.h)
-	DECLARE_MACHINE_RESET(p8k_16);
 
 	void addrmap_program(address_map &map) ATTR_COLD { map.unmap_value_low(); }
 	void addrmap_data(address_map &map) ATTR_COLD { map.unmap_value_low(); }
@@ -420,6 +423,9 @@ private:
 	optional_device_array<z80sio_device, 2> m_sio;
 	required_device<z80sio_device> m_sio8_0;      // 8 bit board SIOs
 	required_device<z80sio_device> m_sio8_1;
+	required_device_array<z80ctc_device, 2> m_ctc8;
+	required_device<z80pio_device> m_pio1;
+	required_device<z80dma_device> m_dma;
 	emu_timer *m_vi_timer = nullptr;              // fallback for the delayed VI request
 	bool m_vi_pending = false;                    // VI request waits for the next instruction fetch
 	bool m_vi_asserted = false;                   // VI line state seen by the CPU
@@ -492,17 +498,17 @@ void p8k_state::p8k_iomap(address_map &map)
 {
 	map.global_mask(0xff);
 	map(0x00, 0x07).rw(FUNC(p8k_state::port0_r), FUNC(p8k_state::port0_w)); // MH7489
-	map(0x08, 0x0b).rw("ctc0", FUNC(z80ctc_device::read), FUNC(z80ctc_device::write));
+	map(0x08, 0x0b).rw(m_ctc8[0], FUNC(z80ctc_device::read), FUNC(z80ctc_device::write));
 	map(0x0c, 0x0f).rw(FUNC(p8k_state::pio0_r), FUNC(p8k_state::pio0_w));
 	map(0x10, 0x10).w(FUNC(p8k_state::p16a_w));   // data to the 16 bit board
 	map(0x14, 0x14).w(FUNC(p8k_state::p16b_w));   // status/strobe/INT to the 16 bit board
-	map(0x18, 0x1b).rw("pio1", FUNC(z80pio_device::read_alt), FUNC(z80pio_device::write_alt));
+	map(0x18, 0x1b).rw(m_pio1, FUNC(z80pio_device::read_alt), FUNC(z80pio_device::write_alt));
 	map(0x1c, 0x1f).rw(m_pio2, FUNC(z80pio_device::read_alt), FUNC(z80pio_device::write_alt));
 	map(0x20, 0x21).m(m_i8272, FUNC(i8272a_device::map));
-	map(0x24, 0x27).rw("sio", FUNC(z80sio_device::ba_cd_r), FUNC(z80sio_device::ba_cd_w));
-	map(0x28, 0x2b).rw("sio1", FUNC(z80sio_device::ba_cd_r), FUNC(z80sio_device::ba_cd_w));
-	map(0x2c, 0x2f).rw("ctc1", FUNC(z80ctc_device::read), FUNC(z80ctc_device::write));
-	map(0x3c, 0x3c).rw("dma", FUNC(z80dma_device::read), FUNC(z80dma_device::write));
+	map(0x24, 0x27).rw(m_sio8_0, FUNC(z80sio_device::ba_cd_r), FUNC(z80sio_device::ba_cd_w));
+	map(0x28, 0x2b).rw(m_sio8_1, FUNC(z80sio_device::ba_cd_r), FUNC(z80sio_device::ba_cd_w));
+	map(0x2c, 0x2f).rw(m_ctc8[1], FUNC(z80ctc_device::read), FUNC(z80ctc_device::write));
+	map(0x3c, 0x3c).rw(m_dma, FUNC(z80dma_device::read), FUNC(z80dma_device::write));
 }
 
 
@@ -686,7 +692,7 @@ void p8k_state::fdc_motor_w(uint8_t data)
 	}
 }
 
-static void p8k_floppies(device_slot_interface &device)
+void p8k_floppies(device_slot_interface &device)
 {
 	device.option_add("525qd", FLOPPY_525_QD);   // 5.25 inch, double sided, double density, 96 tpi (hardware manual 3.1)
 	device.option_add("525hd", FLOPPY_525_HD);
@@ -715,7 +721,7 @@ INPUT_CHANGED_MEMBER(p8k_state::nmi_button)
 }
 
 
-MACHINE_RESET_MEMBER(p8k_state,p8k)
+void p8k_state::machine_reset()
 {
 	if (m_cpu16)
 		board16_reset();
@@ -738,14 +744,14 @@ MACHINE_RESET_MEMBER(p8k_state,p8k)
 
 ***************************************************************************/
 
-#define CLK_CPU     XTAL(4'000'000)
-#define CLK_CTC     (XTAL(9'832'000) / 8)   // 1.229 MHz: CTC trigger input (baud rate generators, real-time clock)
+constexpr XTAL CLK_CPU = XTAL(4'000'000);
+constexpr XTAL CLK_CTC = XTAL(9'832'000) / 8;   // 1.229 MHz: CTC trigger input (baud rate generators, real-time clock)
 
 // System Configuration Register control bits 0-3
-#define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
-#define SCR_MMU_ONH     0x02    // Enable MMUs (disable linear memory)
-#define SCR_SEG_USER    0x04    // Segmented user space
-#define SCR_CLR_PARITY  0x08    // Enable NMI from parity or ECC error (not emulated)
+constexpr uint8_t SCR_BD_MEMON   = 0x01;    // Use off-board memory (disable monitor ROM and local RAM)
+constexpr uint8_t SCR_MMU_ONH    = 0x02;    // Enable MMUs (disable linear memory)
+constexpr uint8_t SCR_SEG_USER   = 0x04;    // Segmented user space
+// SCR bit 3 (0x08) enables the NMI from parity or ECC errors (not emulated)
 
 // The zero count output of a baud rate CTC channel drives a divide by two
 // flip-flop whose output is the SIO's transmit and receive clock (hardware
@@ -905,7 +911,7 @@ void p8k_state::soft_reset_w(uint8_t dummy)
 z8010_device *p8k_state::select_code_mmu(offs_t offset)
 {
 	z8010_device *mmu = m_mmu_code;
-	uint8_t seg = (uint8_t)(offset >> 16);
+	uint8_t seg = uint8_t(offset >> 16);
 
 	LOG("%s CODE MMU SELECT, offset: %06x\n", machine().describe_context(), offset);
 
@@ -926,8 +932,8 @@ z8010_device *p8k_state::select_code_mmu(offs_t offset)
 z8010_device *p8k_state::select_data_mmu(offs_t offset, uint8_t nbr)
 {
 	z8010_device *mmu = m_mmu_stck;
-	uint8_t seg = (uint8_t)(offset >> 16);
-	uint8_t seg_offs = (uint8_t)(offset >> 8);
+	uint8_t seg = uint8_t(offset >> 16);
+	uint8_t seg_offs = uint8_t(offset >> 8);
 
 	LOG("%s DATA MMU SELECT, offset: %06x\n", machine().describe_context(), offset);
 
@@ -1021,7 +1027,7 @@ void p8k_state::install_memory(offs_t lrom_end, offs_t lram_start, offs_t lmem_e
 	sspace.install_view(0x0000, lmem_end, m_view_stck);
 
 	LROM = memregion("cpu16")->base();
-	LRAM = memshare("local_ram")->ptr();
+	LRAM = m_local_ram.target();
 	// The static RAM is built from four 2114 (1K x 4), i.e. 2 KiB; the chip select
 	// decodes 8 KiB, so the RAM repeats up to 5FFF and nothing answers at 6000-7FFF.
 	offs_t const lram_end = lram_start + 0x7ff;
@@ -1150,7 +1156,7 @@ uint8_t p8k_state::mmu_cmd_r(offs_t offset)
 {
 	if (!BIT(offset, 0))
 	{
-		uint8_t reg = (uint8_t)(offset >> 8);
+		uint8_t reg = uint8_t(offset >> 8);
 
 		if (!BIT(offset, 1)) return m_mmu_code->read(reg);
 		if (!BIT(offset, 2)) return m_mmu_data->read(reg);
@@ -1164,7 +1170,7 @@ void p8k_state::mmu_cmd_w(offs_t offset, uint8_t data)
 {
 	if (!BIT(offset, 0))
 	{
-		uint8_t reg = (uint8_t)(offset >> 8);
+		uint8_t reg = uint8_t(offset >> 8);
 
 		if (!BIT(offset, 1)) m_mmu_code->write(reg, data);
 		if (!BIT(offset, 2)) m_mmu_data->write(reg, data);
@@ -1541,20 +1547,18 @@ void p8k_state::p8k(machine_config &config)
 	maincpu.set_addrmap(AS_PROGRAM, &p8k_state::p8k_memmap);
 	maincpu.set_addrmap(AS_IO, &p8k_state::p8k_iomap);
 
-	MCFG_MACHINE_RESET_OVERRIDE(p8k_state,p8k)
-
 	/* peripheral hardware */
-	z80dma_device& dma(P8K_DMA(config, "dma", 16_MHz_XTAL / 4));
+	p8k_dma_device &dma(P8K_DMA(config, m_dma, 16_MHz_XTAL / 4));
 	// DMA BUSREQ drives the Z80 BUSREQ, Z80 BUSACK returns to the DMA's BAI
 	dma.out_busreq_callback().set_inputline(m_maincpu, Z80_INPUT_LINE_BUSREQ);
-	maincpu.busack_cb().set(dma, FUNC(z80dma_device::bai_w));
+	maincpu.busack_cb().set(m_dma, FUNC(z80dma_device::bai_w));
 	dma.out_int_callback().set(FUNC(p8k_state::p8k_dma_irq_w));
 	dma.in_mreq_callback().set(FUNC(p8k_state::memory_read_byte));
 	dma.out_mreq_callback().set(FUNC(p8k_state::memory_write_byte));
 	dma.in_iorq_callback().set(FUNC(p8k_state::io_read_byte));
 	dma.out_iorq_callback().set(FUNC(p8k_state::io_write_byte));
 
-	z80ctc_device& ctc0(Z80CTC(config, "ctc0", 1229000));    /* 1.22MHz clock */
+	z80ctc_device &ctc0(Z80CTC(config, m_ctc8[0], 1229000));    /* 1.22MHz clock */
 	// Baud rate generators: the baud rate oscillator is the trigger input of the CTC
 	// channels, their zero count outputs clock the SIO channels (WEGA sio.h):
 	//   CTC1 ch0 = SIO0 A (tty0), ch1 = SIO0 B (tty1, console), ch2 = SIO1 A (tty2)
@@ -1564,7 +1568,7 @@ void p8k_state::p8k(machine_config &config)
 	ctc0.set_clk<0>(CLK_CTC);
 	ctc0.zc_callback<0>().set([this] (int state) { baud_w(7, state); });
 
-	z80ctc_device& ctc1(Z80CTC(config, "ctc1", 1229000));    /* 1.22MHz clock */
+	z80ctc_device &ctc1(Z80CTC(config, m_ctc8[1], 1229000));    /* 1.22MHz clock */
 	ctc1.intr_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 	ctc1.set_reload_on_reset(true);
 	ctc1.set_clk<0>(CLK_CTC);
@@ -1574,7 +1578,7 @@ void p8k_state::p8k(machine_config &config)
 	ctc1.zc_callback<1>().set([this] (int state) { baud_w(5, state); });
 	ctc1.zc_callback<2>().set([this] (int state) { baud_w(6, state); });
 
-	z80sio_device& sio(Z80SIO(config, "sio", 16_MHz_XTAL / 4));
+	z80sio_device &sio(Z80SIO(config, m_sio8_0, 16_MHz_XTAL / 4));
 	sio.out_txda_callback().set("tty0", FUNC(rs232_port_device::write_txd));
 	sio.out_dtra_callback().set("tty0", FUNC(rs232_port_device::write_dtr));
 	sio.out_rtsa_callback().set("tty0", FUNC(rs232_port_device::write_rts));
@@ -1584,16 +1588,16 @@ void p8k_state::p8k(machine_config &config)
 	sio.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
 	rs232_port_device &tty0(RS232_PORT(config, "tty0", default_rs232_devices, nullptr));
-	tty0.rxd_handler().set("sio", FUNC(z80sio_device::rxa_w));
-	tty0.cts_handler().set("sio", FUNC(z80sio_device::ctsa_w));
-	tty0.dcd_handler().set("sio", FUNC(z80sio_device::dcda_w));
+	tty0.rxd_handler().set(m_sio8_0, FUNC(z80sio_device::rxa_w));
+	tty0.cts_handler().set(m_sio8_0, FUNC(z80sio_device::ctsa_w));
+	tty0.dcd_handler().set(m_sio8_0, FUNC(z80sio_device::dcda_w));
 
 	// tty1 is the system console
 	rs232_port_device &rs232(RS232_PORT(config, "rs232", default_rs232_devices, "terminal"));
-	rs232.rxd_handler().set("sio", FUNC(z80sio_device::rxb_w));
-	rs232.cts_handler().set("sio", FUNC(z80sio_device::ctsb_w));
+	rs232.rxd_handler().set(m_sio8_0, FUNC(z80sio_device::rxb_w));
+	rs232.cts_handler().set(m_sio8_0, FUNC(z80sio_device::ctsb_w));
 
-	z80sio_device& sio1(Z80SIO(config, "sio1", 16_MHz_XTAL / 4));
+	z80sio_device &sio1(Z80SIO(config, m_sio8_1, 16_MHz_XTAL / 4));
 	sio1.out_txda_callback().set("tty2", FUNC(rs232_port_device::write_txd));
 	sio1.out_dtra_callback().set("tty2", FUNC(rs232_port_device::write_dtr));
 	sio1.out_rtsa_callback().set("tty2", FUNC(rs232_port_device::write_rts));
@@ -1603,18 +1607,18 @@ void p8k_state::p8k(machine_config &config)
 	sio1.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
 	rs232_port_device &tty2(RS232_PORT(config, "tty2", default_rs232_devices, nullptr));
-	tty2.rxd_handler().set("sio1", FUNC(z80sio_device::rxa_w));
-	tty2.cts_handler().set("sio1", FUNC(z80sio_device::ctsa_w));
-	tty2.dcd_handler().set("sio1", FUNC(z80sio_device::dcda_w));
+	tty2.rxd_handler().set(m_sio8_1, FUNC(z80sio_device::rxa_w));
+	tty2.cts_handler().set(m_sio8_1, FUNC(z80sio_device::ctsa_w));
+	tty2.dcd_handler().set(m_sio8_1, FUNC(z80sio_device::dcda_w));
 	rs232_port_device &tty3(RS232_PORT(config, "tty3", default_rs232_devices, nullptr));
-	tty3.rxd_handler().set("sio1", FUNC(z80sio_device::rxb_w));
-	tty3.cts_handler().set("sio1", FUNC(z80sio_device::ctsb_w));
-	tty3.dcd_handler().set("sio1", FUNC(z80sio_device::dcdb_w));
+	tty3.rxd_handler().set(m_sio8_1, FUNC(z80sio_device::rxb_w));
+	tty3.cts_handler().set(m_sio8_1, FUNC(z80sio_device::ctsb_w));
+	tty3.dcd_handler().set(m_sio8_1, FUNC(z80sio_device::dcdb_w));
 
 	Z80PIO(config, m_pio0, 1229000);
 	m_pio0->out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
-	z80pio_device& pio1(Z80PIO(config, "pio1", 1229000));
+	z80pio_device &pio1(Z80PIO(config, m_pio1, 1229000));
 	pio1.out_int_callback().set_inputline(m_maincpu, INPUT_LINE_IRQ0);
 
 	Z80PIO(config, m_pio2, 1229000);
@@ -1624,7 +1628,7 @@ void p8k_state::p8k(machine_config &config)
 	m_pio2->out_pb_callback().set(FUNC(p8k_state::fdc_reset_w));
 
 	I8272A(config, m_i8272, 16_MHz_XTAL / 2, true);
-	m_i8272->drq_wr_callback().set("dma", FUNC(z80dma_device::rdy_w));
+	m_i8272->drq_wr_callback().set(m_dma, FUNC(z80dma_device::rdy_w));
 	m_i8272->intrq_wr_callback().set(FUNC(p8k_state::fdc_irq));
 	FLOPPY_CONNECTOR(config, "i8272:0", p8k_floppies, "525qd", floppy_image_device::default_mfm_floppy_formats);
 	FLOPPY_CONNECTOR(config, "i8272:1", p8k_floppies, "525qd", floppy_image_device::default_mfm_floppy_formats);

@@ -10,8 +10,6 @@
 #ifndef MAME_DDR_P8K_U130_H
 #define MAME_DDR_P8K_U130_H
 
-#pragma once
-
 
 // Quartz clock module U130 of the P8000 16 bit board (ports FEF1-FEFF)
 class p8k_u130_device : public device_t, public device_nvram_interface

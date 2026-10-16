@@ -93,7 +93,7 @@ int64_t days_from_civil(int64_t y, unsigned m, unsigned d)
 
 int days_in_month(int64_t year, int month) // month 1-12
 {
-	static const int days[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+	static constexpr int days[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 	bool const leap = ((year % 4) == 0 && (year % 100) != 0) || (year % 400) == 0;
 	return days[month - 1] + ((month == 2 && leap) ? 1 : 0);
 }
@@ -176,9 +176,9 @@ void p8k_u130_device::sync()
 	if (m_live < 0)
 		return;
 
-	static const int date_range[5] = { 12, 4, 10, 10, 10 };
-	static const int date_base[5] = { 1, 0, 0, 0, 0 };
-	static const int time_range[3] = { 24, 6, 10 };
+	static constexpr int date_range[5] = { 12, 4, 10, 10, 10 };
+	static constexpr int date_base[5] = { 1, 0, 0, 0, 0 };
+	static constexpr int time_range[3] = { 24, 6, 10 };
 
 	int const range = (m_state == STATE_DATE_CORR) ? date_range[m_live] : time_range[m_live];
 	int const base = (m_state == STATE_DATE_CORR) ? date_base[m_live] : 0;
@@ -243,12 +243,12 @@ void p8k_u130_device::display(uint8_t *digits, bool &date)
 		d[5] = t.hour / 10;
 	}
 
-	static const uint8_t seg7[10] = { 0x0f, 0x02, 0x17, 0x13, 0x1a, 0x19, 0x1d, 0x03, 0x1f, 0x1b };
+	static constexpr uint8_t seg7[10] = { 0x0f, 0x02, 0x17, 0x13, 0x1a, 0x19, 0x1d, 0x03, 0x1f, 0x1b };
 	for (int i = 0; i < 5; i++)
 		digits[i] = seg7[d[i]];
 
 	// the sixth digit is only 0-2: blank for 0, and only three segment bits are connected
-	static const uint8_t seg7_6[3] = { 0x00, 0x02, 0x05 };
+	static constexpr uint8_t seg7_6[3] = { 0x00, 0x02, 0x05 };
 	digits[5] = seg7_6[d[5] % 3] | 0x80 | (date ? 0x08 : 0x00);
 }
 
