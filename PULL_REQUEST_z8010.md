@@ -12,7 +12,8 @@ ZiLOG System 8000 Hardware Reference Manual, Moore's "Z8000 Handbook").
   %15 and %16 with data byte 00 set the flags in descriptors 5 and 63.
 - The auto-incremented SAR wraps from 63 to 0 ("Dem Deskriptor 63 folgt dabei der
   Deskriptor 0", U8010 6.2.13, 6.2.14, 6.2.16). `INC_SAR()` and `INC_DSC_SAR()`
-  stayed at 63.
+  stayed at 63. I checked this on the real P8000 as well: with SAR at 63, both
+  auto-increment reads left it at 0.
 - Command %10 resets MR, VTR and DSCR (all bits zero, SAR untouched; U8010 6.2.17,
   table 6.2). The device did not know it.
 - The secondary write warning (SWW) is only set for a write to the system stack
