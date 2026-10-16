@@ -13,5 +13,6 @@ to 0000 with no carry into the segment register.
 The fetch now wraps the offset the same way. This also keeps the segment intact
 that a Z8001 in non-segmented mode takes from the PC.
 
-No driver in the tree needs this as far as I know; I found it while bringing up
-the P8000 (separate PR). I tested it by booting WEGA on that driver.
+I found this while bringing up the P8000 (separate PR), where it is not needed
+to boot WEGA. I did not test other drivers that use the Z8000 core, so please
+check whether any of them is affected.
