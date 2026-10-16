@@ -15,6 +15,12 @@ offset 0 of the same segment, not of the next one.
 The fetch now wraps the offset the same way. This also keeps the segment intact
 that a Z8001 in non-segmented mode takes from the PC.
 
+The repeating block instructions (`ldir`, `cpir`, `inir`, `otdr`, `trtirb` and so on)
+start themselves again with `m_pc -= 4`. After a fetch that wrapped, this would borrow
+from the segment, so they now use a small helper, `restart_insn()`, that wraps the
+offset downwards too. I checked it on the emulator with an `ldir` at `<<1>>%FFFC`: the
+repeat stays in segment 1 and copies all words.
+
 I found this while bringing up the P8000 (separate PR), where it is not needed
 to boot WEGA. I did not test other drivers that use the Z8000 core, so please
 check whether any of them is affected.
