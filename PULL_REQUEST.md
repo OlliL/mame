@@ -20,9 +20,9 @@ before this fix numbers like 16000...16260 and 100000 were printed wrongly
 (`expr 13000 + 3000` returned 0, which made `sysgen` write `md(0,0)wega` as
 default boot path).
 
-### z80pio: two fixes
+### z80pio: three fixes
 
-Both were needed for the interrupt driven coupling of the two boards and for
+The first two were needed for the interrupt driven coupling of the two boards and for
 WEGA's disk I/O. `Z80PIO` is used by a lot of drivers, so please look at these
 two with care.
 
@@ -56,6 +56,26 @@ coupling loop. Whether INT is really driven is decided later in
 `check_interrupts()`, which already looks at `m_ius` and the daisy chain. The
 spec does not talk about a new condition on a port that is in service, so this
 rests on the quotes above and on the failure I saw.
+
+Third, the daisy chain priority inside the chip. A port under service blocked
+the other port in both directions. The manual says "Within a PIO port A
+interrupts have higher priority than those of Port B" and "Higher priority
+devices may interrupt the servicing of lower priority devices" (Z80 PIO Technical
+Manual, 2.0, p. 4). So B being in service must not hide a request of A; only A
+in service blocks B. `z80daisy_irq_state()` and `check_interrupts()` now stop
+at the first port under service and let ports in front of it through. The
+acknowledge and RETI handling already walked A before B and needed no change.
+
+### z8010: "set all inhibit" commands
+
+The special I/O commands %15 (set all CPU-inhibit attribute flags) and %16 (set
+all DMA-inhibit attribute flags) cleared the flag in all descriptors when the
+data byte was zero. The ZiLOG System 8000 Hardware Reference Manual (Table 3-2)
+and the Z8010 data sheet list these commands as "Set All CPU-Inhibit Attribute
+Flags" / "Set All DMA-Inhibit Attribute Flags" and know no command that clears
+them, and the data byte is not part of the command. They now always set the
+flag. WEGA's `_invsdrs` writes %15 with whatever is left in a register (I saw
+00, 3E and D8), which with the old behaviour cleared or set the flags at random.
 
 ### z80ctc: opt-in `set_reload_on_reset()`
 
@@ -290,7 +310,10 @@ null_modem`).
 - The main memory is 1 MiB by default and can be set with MAME's `-ram` option
   (`2m`, `4m`, `8m`). With 4 MiB the monitor reports `MAXSEG=<3F>`, with 8 MiB
   `MAXSEG=<7E>`, and WEGA boots with 4022784 / 8217088 bytes of user memory.
-  8 MiB is the maximum: 16 MiB hangs the WEGA kernel's memory sizing loop.
+  8 MiB is the maximum (128 segments of 64 KiB). Segment 127 is always empty,
+  like on the real 16 MiB memory card, which leaves out 7FH ("8 MB minus 64 KB
+  can be used"). Without that hole the firmware memory test (step 70) would
+  never end.
 - A full login (user, password, a command) works on every port with a getty:
   tty0, tty1, tty2, tty5, tty6 and tty7. Output works on all eight ports. `ttyconfig -m 3` / `-t 3`
   switches tty3 between modem and terminal.
@@ -320,10 +343,33 @@ systems, which checks the block mapping around a bad track.
 
 ## 4. Known limitations
 
+Points where I found no statement in the official documents, so the existing
+behaviour is unchanged:
+
+- Segment word of the saved PC and its bit 15, and the wrap of the PC offset at
+  FFFF: the Z8000 documents I could read do not say; MAME's behaviour was
+  checked on real systems.
+- Wrap of the Z8010 SAR after the last descriptor: the data sheet only says it
+  is autoincremented.
+- Z80 PIO: an interrupt that is pending when the enable flag is cleared stays
+  pending (the manual is silent, MAME is consistent with 4.3).
+- Z8010 behaviour when the base register of a segment equals the NBR: not
+  specified, WEGA treats it as data.
+
 - The clock module's stop watch key (ST) and the weekday symbols are not
   emulated, the software doesn't use them.
 
 ## 5. Sources
+
+Official documents behind the corrections in section 1 and the clocks and memory:
+
+- Zilog Z80 PIO Technical Manual (priority 2.0, interrupt enable 4.3, mode 3 5.3,
+  IEO until RETI 6.0);
+- ZiLOG System 8000 Hardware Reference Manual, Table 3-2 (MMU special I/O);
+- Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement);
+- P8000 hardware manual 5.2 and the parts list of the 16 bit board (baud rate
+  quartz 9.832 MHz, divided by eight = 1.229 MHz; I had assumed 9.8304 MHz);
+- the description of the 16 MiB memory card (segment 7FH left out).
 
 A lot of this rests on material I collected, published or drew myself, which is
 what made this emulation possible:

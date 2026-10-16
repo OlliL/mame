@@ -88,6 +88,8 @@ int z80pio_device::z80daisy_irq_state()
 {
 	int state = 0;
 
+	// port A has the higher priority: a port under service blocks the ports behind
+	// it, but a port in front of it may still interrupt its service routine
 	for (int index = PORT_A; index < PORT_COUNT; index++)
 	{
 		pio_port &port = m_port[index];
@@ -95,12 +97,13 @@ int z80pio_device::z80daisy_irq_state()
 		if (port.m_ius)
 		{
 			// interrupt under service
-			return Z80_DAISY_IEO;
+			state |= Z80_DAISY_IEO;
+			break;
 		}
 		else if (port.m_ie && port.m_ip)
 		{
 			// interrupt pending
-			state = Z80_DAISY_INT;
+			state |= Z80_DAISY_INT;
 		}
 	}
 
@@ -237,16 +240,19 @@ uint8_t z80pio_device::control_read()
 void z80pio_device::check_interrupts()
 {
 	int state = CLEAR_LINE;
-	bool ius = (m_port[PORT_A].m_ius || m_port[PORT_B].m_ius);
+	bool ius = false; // a port under service blocks only the ports behind it (A before B)
 
 	for (int index = PORT_A; index < PORT_COUNT; index++)
 	{
 		if (LOG) logerror("Z80PIO Port %c IE %s IP %s IUS %s\n", 'A' + index, m_port[index].m_ie ? "1":"0", m_port[index].m_ip ? "1":"0", m_port[index].m_ius ? "1":"0");
 
-		if (!ius && m_port[index].m_ie && m_port[index].m_ip)
+		if (!ius && !m_port[index].m_ius && m_port[index].m_ie && m_port[index].m_ip)
 		{
 			state = ASSERT_LINE;
 		}
+
+		if (m_port[index].m_ius)
+			ius = true;
 	}
 
 	if (LOG) logerror("Z80PIO INT %u\n", state);

@@ -317,8 +317,7 @@ void z8010_device::write(offs_t offset, uint8_t data)
 		for (int i = 0; i < SDR_MAX_SEGMENTS; i++)
 		{
 			uint8_t &value = SDR_ENTRY(i).attr;
-			value = (data ? (value | SDR_ATTR_CPUI) :
-							(value & ~SDR_ATTR_CPUI));
+			value |= SDR_ATTR_CPUI;
 		}
 		}
 		break;
@@ -327,8 +326,7 @@ void z8010_device::write(offs_t offset, uint8_t data)
 		for (int i = 0; i < SDR_MAX_SEGMENTS; i++)
 		{
 			uint8_t &value = SDR_ENTRY(i).attr;
-			value = (data ? (value | SDR_ATTR_DMAI) :
-							(value & ~SDR_ATTR_DMAI));
+			value |= SDR_ATTR_DMAI;
 		}
 		}
 		break;

@@ -56,8 +56,9 @@
                L2 (14) towards the 16 bit board, PIO1 (18), PIO2 (1C)
       * 20-3F: FDC (20), SIO0 (24), SIO1 (28), CTC1 (2C), three spare enables
                RES1-3 (30, 34, 38), DMA (3C)
-      * Clocks: 16 MHz quartz (CPU 4 MHz, FDC), 9.8304 MHz quartz divided by
-        eight (7493) = 1.2288 MHz trigger input of the baud rate CTC channels.
+      * Clocks: 16 MHz quartz (CPU 4 MHz, FDC), 9.832 MHz quartz (parts list
+        "MQ 02-9832,0k") divided by eight (7493, manual 3.3 baud rate generator)
+        = 1.229 MHz trigger input of the baud rate CTC channels.
         CTC1 channels 0-2 and CTC0 channel 0 each drive a divide by two
         flip-flop that clocks one SIO channel (SIO0 A/B, SIO1 A, SIO1 B).
       * Interrupt priority chain: DMA, PIO2, CTC0, SIO0, SIO1, PIO0 (coupling),
@@ -108,15 +109,16 @@
         physical address bits (16 MiB).  16 MiB was tried: the WEGA kernel hangs
         in the memory sizing loop of main() (it writes 0x19 to each 256 byte
         click and stops at the first one that does not read back).
-      * The last segment (127) is not populated while the MMUs are off, also
-        with 8 MiB: test step 70 of MON16 (p.test.s, "Test auf externen
-        Speicher") walks the segments upwards from 0, writes the segment number
-        to offsets 8000 and FFFE of each one, reads it back, and stops at the
-        first segment where neither address reads back; the segment before it
-        is the highest (MAX_SEGNR).  If every segment up to the end of the
-        address range reads back, the segment number wraps around to the start
-        and the scan never ends: the firmware hangs in its memory test.
-        Behind the MMUs, as seen by WEGA, the memory is complete.
+      * The last segment (127, physical 7F0000-7FFFFF) is not populated, also
+        with 8 MiB.  The 16 MiB memory card leaves it out too ("8 MB minus
+        64 KB can be used").  Test step 70 of MON16 (p.test.s, "Test auf
+        externen Speicher") walks the segments upwards from 0, writes the
+        segment number to offsets 8000 and FFFE of each one, reads it back, and
+        stops at the first segment where neither address reads back; the
+        segment before it is the highest (MAX_SEGNR).  If every segment up to
+        the end of the address range reads back, the segment number wraps
+        around to the start and the scan never ends: the firmware hangs in its
+        memory test.  The hole also ends the WEGA sizing loop.
 
     Installing WEGA 3.1 on an empty hard disk (software list "p8000_flop")
       The steps follow a run on the real machine and were repeated with this
@@ -737,7 +739,7 @@ MACHINE_RESET_MEMBER(p8k_state,p8k)
 ***************************************************************************/
 
 #define CLK_CPU     XTAL(4'000'000)
-#define CLK_CTC     (2.4576_MHz_XTAL / 2)   // 1.2288 MHz: CTC trigger input (baud rate generators, real-time clock)
+#define CLK_CTC     (XTAL(9'832'000) / 8)   // 1.229 MHz: CTC trigger input (baud rate generators, real-time clock)
 
 // System Configuration Register control bits 0-3
 #define SCR_BD_MEMON    0x01    // Use off-board memory (disable monitor ROM and local RAM)
@@ -951,13 +953,14 @@ z8010_device *p8k_state::select_data_mmu(offs_t offset, uint8_t nbr)
 	return mmu;
 }
 
-// Segment 127, the last 64 KiB block of the 8 MiB a segmented CPU can address, has no
-// memory while the MMUs are off: MON16's memory scan (test step 70) would otherwise
-// never find the end of the memory because the segment number wraps around.  Behind
-// the MMUs the block is real, but the largest memory size offered is 8 MiB anyway.
+// Segment 127, the last 64 KiB block (7F0000-7FFFFF) of the 8 MiB a segmented CPU can address,
+// has no memory.  The 16 MiB memory card of the P8000 leaves it out as well (its address
+// decoder gates 7FH, "8 MB minus 64 KB can be used"), so that the memory scan of MON16 (test
+// step 70) finds the end of the memory instead of running around the segment numbers forever,
+// and so that the WEGA kernel's sizing loop (main.c) stops there.
 bool p8k_state::ram_hole(offs_t offset) const
 {
-	return !(m_reg_scr & SCR_MMU_ONH) && (offset >= 0x7f'0000);
+	return offset >= 0x7f'0000 && offset < 0x80'0000;
 }
 
 uint16_t p8k_state::ram16_r(offs_t offset, uint16_t mask)
