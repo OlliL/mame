@@ -20,8 +20,8 @@ that a Z8001 in non-segmented mode takes from the PC.
 
 The repeating block instructions (`ldir`, `cpir`, `inir`, `otdr`, `trtirb` and so on)
 start themselves again with `m_pc -= 4`. After a fetch that wrapped, this would borrow
-from the segment, so they now use a small helper, `restart_insn()`, that wraps the
-offset downwards too. I checked it with an `ldir` at the end of a segment on the emulator and on a real P8000
+from the segment, so they now use `addr_sub(m_pc, 4)`, which wraps the offset downwards too
+(the fetch uses `addr_add(m_pc, 2)`). I checked it with an `ldir` at the end of a segment on the emulator and on a real P8000
 (Z8001): the repeat stays in the segment and copies all words.
 
 I found this while bringing up the P8000 (separate PR), where it is not needed
