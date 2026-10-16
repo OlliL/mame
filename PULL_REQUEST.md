@@ -20,6 +20,16 @@ before this fix numbers like 16000...16260 and 100000 were printed wrongly
 (`expr 13000 + 3000` returned 0, which made `sysgen` write `md(0,0)wega` as
 default boot path).
 
+The DAB table of the U8000 CPU description (arithmetic instructions, DAB, p. 68;
+Z8000 compatible) lists the correction (00, 06, 60, 66, FA, A0, 9A) and the
+resulting carry for each combination of preceding instruction (ADDB/ADCB or
+SUBB/SBCB), C, H and the two digits. The Z8000 books by Leventhal (Table 3-12,
+p. 3-168) and Moore (Table 2-8, p. 133) and the Z8000 programming book with
+"DAB R" (p. 132) give the same table. I checked all 764 byte/flag combinations
+that the table covers against the code: no difference. Z and S are set from the
+result, P/V is not touched, as listed ("CZS---"). Combinations outside the table
+are undefined in all of these sources.
+
 ### z80pio: three fixes
 
 The first two were needed for the interrupt driven coupling of the two boards and for
@@ -392,6 +402,7 @@ Official documents behind the corrections in section 1 and the clocks and memory
 - Zilog Z80 PIO Technical Manual (priority 2.0, interrupt enable 4.3, mode 3 5.3,
   IEO until RETI 6.0);
 - ZiLOG System 8000 Hardware Reference Manual, Table 3-2 (MMU special I/O);
+- U8000 CPU description, DAB (p. 68) and Leventhal, Z8000 Assembly Language Programming, 3-167/3-168 (DAB table);
 - Martin L. Moore, Z8000 Handbook, chapter 2, p. 19 (PC offset wraps without carry into the segment; additional confirmation);
 - Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement) and the
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
