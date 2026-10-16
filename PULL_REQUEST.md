@@ -391,6 +391,11 @@ behaviour is unchanged:
   status area (Fig. 6.2) has a "SEG" bit in front of the segment number. Nothing
   says whether that bit is pushed or what IRET does with it, so the existing
   behaviour is unchanged.
+- Z8010 write warnings: the U8010 description (5.2, p. 34) sets the secondary write
+  warning only for a system stack access (status %9) and the fatal flag for any other
+  write warning once a flag is set. The device checks system mode only, so a system
+  mode write warning from a non-stack access sets SWW instead of FATL. This is a rare
+  case and DMA is involved, so I left it unchanged.
 - Z80 PIO: an interrupt that is pending when the enable flag is cleared stays
   pending (the manual is silent, MAME is consistent with 4.3).
 - Z8010 behaviour when the base register of a segment equals the NBR: not
@@ -427,6 +432,11 @@ Official documents behind the corrections in section 1 and the clocks and memory
   limit byte in 256 byte blocks, valid blocks 0..limit), p. 13-8/13-9 (mode register),
   p. 13-10/13-11 (Table 13-1: commands %08-%0F, %11, %13-%16, %20), p. 13-16/13-17
   (violation type register, write warnings, fatal); additional confirmation;
+- U8010 description 5.4, p. 35 and 5.4 examples p. 37/38: the valid offsets of a normal
+  segment are 0 to 256*N+255, of a stack segment (DIRW set) 256*N to 65535, with N the
+  limit field and N = 256 - n for n blocks; the lowest block gives the write warning
+  (matches `so > limit` and `so < limit` in the device; the figure in Leventhal p. 13-6
+  reads differently, the U8010 description is followed);
 - Martin L. Moore, Z8000 Handbook (Prentice-Hall), chapter 5, Z8010 MMU, p. 355
   (SAR is 6 bits, autoincrement) and p. 358 (Table 5-3, commands %15/%16); a book
   on the original chips, used as additional confirmation;
