@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">
+<!--
+license:CC0-1.0
+-->
+
+<softwarelist name="p8000_flop" description="EAW P8000 floppy disks">
+
+	<software name="udos31">
+		<description>UDOS - Systemdisk</description>
+		<year>1989</year>
+		<publisher>ZFT/KEAW</publisher>
+		<info name="release" value="19890529"/>
+		<info name="version" value="3.1"/>
+		<info name="partno" value="889 336"/>
+		<info name="usage" value="Return at the monitor prompt boots the disk; UDOS prompt is %"/>
+		<part name="flop1" interface="floppy_5_25">
+			<feature name="part_id" value="UDOS - Systemdisk"/>
+			<dataarea name="flop" size="391428">
+				<rom name="udossys.cqm" size="391428" crc="0ef40142" sha1="6ed9e00a152ccc77c4c2375227b006e496f8037d"/>
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="osm30">
+		<description>OS/M - Systemdisk</description>
+		<year>1988</year>
+		<publisher>ZFT/KEAW</publisher>
+		<info name="release" value="19880115"/>
+		<info name="version" value="3.0"/>
+		<info name="partno" value="889 338"/>
+		<info name="usage" value="8 bit board (p8000)"/>
+		<part name="flop1" interface="floppy_5_25">
+			<feature name="part_id" value="OS/M - Systemdisk"/>
+			<dataarea name="flop" size="455834">
+				<rom name="osm30.cqm" size="455834" crc="b4cb5ae9" sha1="36a028254f0e4bdaa317add40b28d17f9739748f"/>
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="w31start">
+		<description>WEGA - Startdisk</description>
+		<year>1989</year>
+		<publisher>ZFT/KEAW</publisher>
+		<info name="release" value="19890706"/>
+		<info name="version" value="3.1"/>
+		<info name="partno" value="889 347"/>
+		<info name="usage" value="16 bit board (p8000_16): Return, Return at the monitor boots this disk; use it for sa.format, sa.mkfs, sa.install and as boot disk"/>
+		<part name="flop1" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - Startdisk"/>
+			<dataarea name="flop" size="318797">
+				<rom name="w31start.cqm" size="318797" crc="a1e26192" sha1="fc35b342603ff4a1402f9af2b6ef586af4ce8a5d"/>
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="w31root">
+		<description>WEGA - root</description>
+		<year>1989</year>
+		<publisher>ZFT/KEAW</publisher>
+		<info name="release" value="19890706"/>
+		<info name="version" value="3.1"/>
+		<info name="partno" value="889 348"/>
+		<info name="partno" value="889 349"/>
+		<info name="partno" value="889 350"/>
+		<info name="partno" value="889 351"/>
+		<info name="partno" value="889 352"/>
+		<info name="usage" value="Install with sa.install into md(0,16000) from the second floppy drive"/>
+		<part name="flop1" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - root 1"/>
+			<dataarea name="flop" size="586213">
+				<rom name="w31root1.cqm" size="586213" crc="dd6ae0f1" sha1="2d3766b544ceaeb348ec980c15b0d5e2b71371f7"/>
+			</dataarea>
+		</part>
+		<part name="flop2" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - root 2"/>
+			<dataarea name="flop" size="553355">
+				<rom name="w31root2.cqm" size="553355" crc="16e3c947" sha1="b4a02f1c7347a6142bda1d337b954639bc6b880b"/>
+			</dataarea>
+		</part>
+		<part name="flop3" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - root 3"/>
+			<dataarea name="flop" size="581944">
+				<rom name="w31root3.cqm" size="581944" crc="18f528a3" sha1="08db7e45530275163fd016c1b3f5115b1638f8a4"/>
+			</dataarea>
+		</part>
+		<part name="flop4" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - root 4"/>
+			<dataarea name="flop" size="597054">
+				<rom name="w31root4.cqm" size="597054" crc="6e8e4054" sha1="2ee93bb9ae7b1d340d9acd3160cacba3daf4994e"/>
+			</dataarea>
+		</part>
+		<part name="flop5" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - root 5"/>
+			<dataarea name="flop" size="555762">
+				<rom name="w31root5.cqm" size="555762" crc="af0b408a" sha1="3924edc5b95abddb9dfc331967a8fb7fcfadbf6f"/>
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="w31usr">
+		<description>WEGA - usr</description>
+		<year>1989</year>
+		<publisher>ZFT/KEAW</publisher>
+		<info name="release" value="19890706"/>
+		<info name="version" value="3.1"/>
+		<info name="partno" value="889 353"/>
+		<info name="partno" value="889 354"/>
+		<info name="partno" value="889 355"/>
+		<info name="partno" value="889 356"/>
+		<info name="partno" value="889 357"/>
+		<info name="partno" value="889 358"/>
+		<info name="partno" value="889 359"/>
+		<info name="partno" value="889 360"/>
+		<info name="partno" value="889 361"/>
+		<info name="usage" value="Install with sa.install into md(0,0) from the second floppy drive, followed by the documentation disks"/>
+		<part name="flop1" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 1"/>
+			<dataarea name="flop" size="645930">
+				<rom name="w31usr1.cqm" size="645930" crc="9f392481" sha1="e22206dca40752451ed91e6399f84a180e4eafe6"/>
+			</dataarea>
+		</part>
+		<part name="flop2" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 2"/>
+			<dataarea name="flop" size="484871">
+				<rom name="w31usr2.cqm" size="484871" crc="6f08d057" sha1="7554a31123623c7b923c1a71156e3fb5f0f1d832"/>
+			</dataarea>
+		</part>
+		<part name="flop3" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 3"/>
+			<dataarea name="flop" size="523556">
+				<rom name="w31usr3.cqm" size="523556" crc="311c4537" sha1="73a3ff23a41cbac6fa16b3b83bd99efe9f8a6918"/>
+			</dataarea>
+		</part>
+		<part name="flop4" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 4"/>
+			<dataarea name="flop" size="498806">
+				<rom name="w31usr4.cqm" size="498806" crc="59fd9bc9" sha1="5f7873734deca3382ded1ce0ece89a94a51b01a6"/>
+			</dataarea>
+		</part>
+		<part name="flop5" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 5"/>
+			<dataarea name="flop" size="572751">
+				<rom name="w31usr5.cqm" size="572751" crc="28302fea" sha1="d98b74bf90c710e9e5bb080a6f175d3747dca845"/>
+			</dataarea>
+		</part>
+		<part name="flop6" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 6"/>
+			<dataarea name="flop" size="537156">
+				<rom name="w31usr6.cqm" size="537156" crc="300c7b1b" sha1="1fb8ca002804464e97e3d09e06031a7394f6301b"/>
+			</dataarea>
+		</part>
+		<part name="flop7" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 7"/>
+			<dataarea name="flop" size="476291">
+				<rom name="w31usr7.cqm" size="476291" crc="f059d52f" sha1="8fc1ee7a0de9b977c150cccfee65456791a6aba9"/>
+			</dataarea>
+		</part>
+		<part name="flop8" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 8"/>
+			<dataarea name="flop" size="558414">
+				<rom name="w31usr8.cqm" size="558414" crc="c7e6e3f1" sha1="ba4f9826365fbd0ce3948edc150642a3b566282d"/>
+			</dataarea>
+		</part>
+		<part name="flop9" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - usr 9"/>
+			<dataarea name="flop" size="388740">
+				<rom name="w31usr9.cqm" size="388740" crc="e30ab9d4" sha1="b3700a259d2651ea4fa3855bea808232882347f3"/>
+			</dataarea>
+		</part>
+	</software>
+
+	<software name="w31doc">
+		<description>WEGA - doc</description>
+		<year>1989</year>
+		<publisher>ZFT/KEAW</publisher>
+		<info name="release" value="19890706"/>
+		<info name="version" value="3.1"/>
+		<info name="partno" value="889 362"/>
+		<info name="partno" value="889 363"/>
+		<info name="usage" value="Not to be installed: WEGA file system disks with the manuals as packed print files; mount in WEGA with /etc/mount /dev/fd1 /fd1 -r and copy the files"/>
+		<part name="flop1" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - doc 1"/>
+			<dataarea name="flop" size="504239">
+				<rom name="w31doc1.cqm" size="504239" crc="2ee396de" sha1="46631f20f619c6318494f891f9a0a2e59cc5009f"/>
+			</dataarea>
+		</part>
+		<part name="flop2" interface="floppy_5_25">
+			<feature name="part_id" value="WEGA - doc 2"/>
+			<dataarea name="flop" size="527519">
+				<rom name="w31doc2.cqm" size="527519" crc="e3e2a2a9" sha1="ec84bda3786a2b1c69e62d663f3309b872a7f155"/>
+			</dataarea>
+		</part>
+	</software>
+
+</softwarelist>
