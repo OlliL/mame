@@ -99,20 +99,24 @@
         (WEGA from the Winchester disk).  All input must be in uppercase.
 
     Memory size (16 bit board)
-      * The driver provides 1 MiB of main memory: 16 segments of 64 KiB, which the
-        monitor reports as "MAXSEG=<0F>".  Physical addresses beyond it read as
-        FFFF and ignore writes.
-      * The Z8010 MMUs deliver 24 physical address bits (16 MiB); the segmented
-        Z8001 names 128 segments (7 bit segment number) of 64 KiB, i.e. 8 MiB, at
-        a time.
-      * The memory therefore must never fill the whole addressable range: at
-        least the last block has to be missing.  Test step 70 of MON16 (p.test.s, "Test auf externen
+      * MAME's standard RAM option sets the main memory of the memory cards:
+        "-ram 1m" (default), 2m, 4m or 8m.  The monitor reports it as
+        "MAXSEG=<xx>", the number of the highest 64 KiB segment: 1m = 0F,
+        4m = 3F, 8m = 7E.  WEGA reports the rest as "user memory size".
+      * 8 MiB is the maximum.  The segmented Z8001 names 128 segments (7 bit
+        segment number) of 64 KiB, i.e. 8 MiB, and the Z8010 MMUs deliver 24
+        physical address bits (16 MiB).  16 MiB was tried: the WEGA kernel hangs
+        in the memory sizing loop of main() (it writes 0x19 to each 256 byte
+        click and stops at the first one that does not read back).
+      * The last segment (127) is not populated while the MMUs are off, also
+        with 8 MiB: test step 70 of MON16 (p.test.s, "Test auf externen
         Speicher") walks the segments upwards from 0, writes the segment number
         to offsets 8000 and FFFE of each one, reads it back, and stops at the
         first segment where neither address reads back; the segment before it
         is the highest (MAX_SEGNR).  If every segment up to the end of the
         address range reads back, the segment number wraps around to the start
         and the scan never ends: the firmware hangs in its memory test.
+        Behind the MMUs, as seen by WEGA, the memory is complete.
 
     Installing WEGA 3.1 on an empty hard disk (software list "p8000_flop")
       The steps follow a run on the real machine and were repeated with this
@@ -200,6 +204,7 @@
 #include "sound/beep.h"
 #include "speaker.h"
 #include "machine/clock.h"
+#include "machine/ram.h"
 #include "bus/rs232/rs232.h"
 
 #include "p8k_u130.h"
@@ -282,7 +287,7 @@ public:
 		, m_wdc(*this, "wdc")
 		, m_u130(*this, "u130")
 		, m_i8272(*this, "i8272")
-		, m_ram(*this, "ram", 0x100000, ENDIANNESS_BIG)
+		, m_ramdev(*this, RAM_TAG)
 		, m_local_ram(*this, "local_ram", 0x800, ENDIANNESS_BIG)
 		, m_adp_view{{*this, "adp0"}, {*this, "adp1"}, {*this, "adp2"}, {*this, "adp3"}, {*this, "adp4"}, {*this, "adp5"}, {*this, "adp6"}, {*this, "adp7"}, {*this, "adp8"}, {*this, "adp9"}, {*this, "adp10"}, {*this, "adp11"}, {*this, "adp12"}, {*this, "adp13"}, {*this, "adp14"}, {*this, "adp15"}}
 		, m_view_code(*this, "view_code")
@@ -358,6 +363,7 @@ private:
 	z8010_device *select_data_mmu(offs_t offset, uint8_t nbr);
 
 	bool translate_addr(int spacenum, bool write, offs_t &offset);
+	bool ram_hole(offs_t offset) const;
 	uint16_t ram16_r(offs_t offset, uint16_t mask);
 	void ram16_w(offs_t offset, uint16_t data, uint16_t mask);
 	uint16_t ram_r(address_space &space, offs_t offset, uint16_t mask);
@@ -426,7 +432,7 @@ private:
 	bool m_fdc_tc = false;
 
 	// 16-bit board
-	memory_share_creator<uint16_t> m_ram;         // external memory, 1 MiB
+	optional_device<ram_device> m_ramdev;         // external memory (default 1 MiB, "-ram" up to 8 MiB)
 	memory_share_creator<uint16_t> m_local_ram;   // on-board static RAM, 2 KiB at 4000-47FF (mirrored up to 5FFF)
 	// 8 bit board memory control (ADP + reset flip-flop), one view per 4K slice
 	memory_view m_adp_view[16];
@@ -945,17 +951,33 @@ z8010_device *p8k_state::select_data_mmu(offs_t offset, uint8_t nbr)
 	return mmu;
 }
 
+// Segment 127, the last 64 KiB block of the 8 MiB a segmented CPU can address, has no
+// memory while the MMUs are off: MON16's memory scan (test step 70) would otherwise
+// never find the end of the memory because the segment number wraps around.  Behind
+// the MMUs the block is real, but the largest memory size offered is 8 MiB anyway.
+bool p8k_state::ram_hole(offs_t offset) const
+{
+	return !(m_reg_scr & SCR_MMU_ONH) && (offset >= 0x7f'0000);
+}
+
 uint16_t p8k_state::ram16_r(offs_t offset, uint16_t mask)
 {
-	offs_t const word = offset >> 1;
-	return (word < m_ram.length()) ? m_ram[word] : 0xffff;
+	// offset is the byte address of the memory bus
+	if (offset >= m_ramdev->size() || ram_hole(offset))
+		return 0xffff;
+	uint8_t const *const p = m_ramdev->pointer() + (offset & ~1);
+	return (p[0] << 8) | p[1];
 }
 
 void p8k_state::ram16_w(offs_t offset, uint16_t data, uint16_t mask)
 {
-	offs_t const word = offset >> 1;
-	if (word < m_ram.length())
-		m_ram[word] = (m_ram[word] & ~mask) | (data & mask);
+	if (offset >= m_ramdev->size() || ram_hole(offset))
+		return;
+	uint8_t *const p = m_ramdev->pointer() + (offset & ~1);
+	uint16_t const old = (p[0] << 8) | p[1];
+	uint16_t const val = (old & ~mask) | (data & mask);
+	p[0] = val >> 8;
+	p[1] = val & 0xff;
 }
 
 uint16_t p8k_state::ram_r(address_space &space, offs_t offset, uint16_t mask)
@@ -1617,6 +1639,9 @@ void p8k_state::p8k_16(machine_config &config)
 	// the 16 bit system always consists of an 8 bit board and a 16 bit board
 	// that are coupled through two PIOs
 	p8k(config);
+
+	// main memory of the memory cards: 1 MiB by default, "-ram 2m|4m|8m" for more (see the memory size notes above)
+	RAM(config, m_ramdev).set_default_size("1M").set_extra_options("2M,4M,8M");
 
 	/* 16 bit board: CPU and memory management */
 	Z8001(config, m_cpu16, CLK_CPU);
