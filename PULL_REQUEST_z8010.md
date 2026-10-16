@@ -15,7 +15,8 @@ ZiLOG System 8000 Hardware Reference Manual, Moore's "Z8000 Handbook").
   stayed at 63. I checked this on the real P8000 as well: with SAR at 63, both
   auto-increment reads left it at 0.
 - Command %10 resets MR, VTR and DSCR (all bits zero, SAR untouched; U8010 6.2.17,
-  table 6.2). The device did not know it.
+  table 6.2). The device did not know it. On the real P8000, MR and DSCR read
+  zero after the command and SAR was unchanged.
 - The secondary write warning (SWW) is only set for a write to the system stack
   (status %9, system mode) while a flag is already set; any other write warning in
   that state is FATL (U8010 5.2, p. 34). The device checked the mode only, so a
