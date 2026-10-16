@@ -333,6 +333,7 @@ void z8010_device::write(offs_t offset, uint8_t data)
 		break;
 
 	/* status registers */
+	case 0x10: m_mode = 0; m_vtype = 0; m_dsc = 0; break; // reset of MR, VTR and DSCR (U8010 description 6.2.17, Table 6.2)
 	case 0x11: m_vtype = 0; break;
 	case 0x13: m_vtype &= ~VTYPE_SWW; break;
 	case 0x14: m_vtype &= ~VTYPE_FATL; break;

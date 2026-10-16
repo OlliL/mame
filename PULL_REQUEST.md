@@ -112,6 +112,10 @@ of staying at 63 (and instead of staying at the last field of descriptor 63), so
 %15/%16 as "Set All CPU-Inhibit Flags" / "Set All DMA-Inhibit Flags". Nothing in
 the P8000 software depends on it, since it always writes the SAR before an access.
 
+The same description (6.2.17, Table 6.2) lists command %10, "reset of MR, VTR and DSCR":
+all bits of these three registers become zero, the SAR is not mentioned. The device
+did not know this command, so it is added.
+
 ### z80ctc: opt-in `set_reload_on_reset()`
 
 ```cpp
@@ -417,7 +421,7 @@ Official documents behind the corrections in section 1 and the clocks and memory
 - Martin L. Moore, Z8000 Handbook, chapter 2, p. 19 (PC offset wraps without carry into the segment; additional confirmation);
 - Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement) and the
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
-  6.2.21, 6.2.22 and E.3 (SAR wraps 63 to 0; %15/%16 transfer no data and the
+  6.2.17, 6.2.21, 6.2.22 and E.3 (SAR wraps 63 to 0; %15/%16 transfer no data and the
   data byte is arbitrary; command code table);
 - Leventhal, Z8000 Assembly Language Programming, chapter 13: p. 13-5/13-6 (64 descriptors,
   limit byte in 256 byte blocks, valid blocks 0..limit), p. 13-8/13-9 (mode register),
