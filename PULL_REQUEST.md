@@ -410,6 +410,10 @@ Official documents behind the corrections in section 1 and the clocks and memory
   lower priority devices wait for the acknowledge); no difference found, the book
   says nothing about bit 15 of the saved segment word or a pending PIO interrupt
   when the enable flag is cleared;
+- Richard Mateosian, Programming the Z8000, chapter II p. 41-45 (stack after interrupt: reason,
+  FCW, PC; for internal traps the reason is the first instruction word and the saved PC
+  points at the second word; PSAP low byte zero) and appendix E p. 294 (program status
+  area layout); no difference found, nothing about bit 15 of the saved segment word;
 - Martin L. Moore, Z8000 Handbook, chapter 2, p. 19 (PC offset wraps without carry into the segment; additional confirmation);
 - Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement) and the
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
