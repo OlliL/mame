@@ -354,9 +354,16 @@ systems, which checks the block mapping around a bad track.
 Points where I found no statement in the official documents, so the existing
 behaviour is unchanged:
 
-- Segment word of the saved PC and its bit 15, and the wrap of the PC offset at
-  FFFF: the Z8000 documents I could read do not say; MAME's behaviour was
-  checked on real systems.
+- Wrap of the PC offset at FFFF: the U8000 (Z8000 compatible) description says
+  that instructions and multi-byte data elements cannot cross segment
+  boundaries (3.4.2) and that the offset of an indexed, base or relative
+  address wraps without touching the segment number (5.5.5, 5.5.7, 5.5.8). The
+  address arithmetic of the CPU core already does that. What a sequential
+  instruction fetch does at the end of a segment is not defined, so it is
+  unchanged.
+- Bit 15 of the saved PC segment word: the program status area (Fig. 6.2) has a
+  "SEG" bit in front of the segment number, but the documents I could read do
+  not say what the CPU pushes there and what IRET does with it; unchanged.
 - Z80 PIO: an interrupt that is pending when the enable flag is cleared stays
   pending (the manual is silent, MAME is consistent with 4.3).
 - Z8010 behaviour when the base register of a segment equals the NBR: not
@@ -378,6 +385,8 @@ Official documents behind the corrections in section 1 and the clocks and memory
   data byte is arbitrary; command code table);
 - P8000 hardware manual 5.2 and the parts list of the 16 bit board (baud rate
   quartz 9.832 MHz, divided by eight = 1.229 MHz; I had assumed 9.8304 MHz);
+- U8000 CPU technical description, 3.4.2, 5.5.5-5.5.8, Fig. 6.2 (segment
+  boundaries, offset arithmetic, program status area);
 - the description of the 16 MiB memory card (segment 7FH left out).
 
 A lot of this rests on material I collected, published or drew myself, which is
