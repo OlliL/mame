@@ -403,6 +403,13 @@ Official documents behind the corrections in section 1 and the clocks and memory
   IEO until RETI 6.0);
 - ZiLOG System 8000 Hardware Reference Manual, Table 3-2 (MMU special I/O);
 - U8000 CPU description, DAB (p. 68) and Leventhal, Z8000 Assembly Language Programming, 3-167/3-168 (DAB table);
+- Leventhal, Z8000 Assembly Language Programming, chapter 12: p. 12-10 (stack frame
+  identifier, FCW, PC segment, PC offset), p. 12-17 (interrupt priorities), p. 12-18
+  (IRET pops and discards the identifier; reset loads FCW from 0002, PC segment from
+  0004, PC offset from 0006 on the Z8001), p. 12-23 (Z80 PIO: port A before port B,
+  lower priority devices wait for the acknowledge); no difference found, the book
+  says nothing about bit 15 of the saved segment word or a pending PIO interrupt
+  when the enable flag is cleared;
 - Martin L. Moore, Z8000 Handbook, chapter 2, p. 19 (PC offset wraps without carry into the segment; additional confirmation);
 - Zilog Z8010 MMU data sheet (special I/O commands, SAR autoincrement) and the
   U8010 (Z8010 compatible) technical description, 3.2.1, 4.1, 6.2.13-6.2.16,
