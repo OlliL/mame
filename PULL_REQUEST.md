@@ -10,6 +10,23 @@ The driver needed small changes in three shared Z80 devices (`z80pio`, `z80ctc`,
 
 ## 1. Shared devices
 
+Which of these the P8000 needs and which are only corrections:
+
+| Change | What it is | P8000 without it |
+|---|---|---|
+| `z8000` DAB | bug | WEGA prints decimal numbers wrongly (`expr 13000 + 3000` gives 0) |
+| `z80pio` acknowledge only if enabled | bug | the CPU gets the vector of a port that did not ask |
+| `z80pio` mode 3 match while in service | bug | one lost edge hangs the WEGA kernel in the coupling loop |
+| `z80ctc` `set_reload_on_reset()` | opt-in, off by default | the monitor self test fails |
+| `z80dma` `byte_counter()` | hook, no change in behaviour | needed for the UA858D byte counter quirk |
+| `z80pio` priority of port A over B, mode 3 request after RETI | bug (Z80 PIO manual, U855 description) | works |
+| `z8000` PC offset wraps at FFFF | bug (U8000 description, Moore) | works |
+| `z8010` %15/%16 always set, SAR wraps 63 to 0, command %10, SWW only for the system stack | bug (U8010 description) | works |
+
+"Works" means that I took the change out and WEGA still boots to the login. They
+are documented corrections that other drivers can profit from, but the P8000 does
+not depend on them, so they can be dropped from this pull request if you prefer.
+
 ### z8000: DAB fix
 
 `DAB` computed the high-nibble correction from the byte after the +6 low-nibble
