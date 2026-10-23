@@ -18225,6 +18225,10 @@ mc8030
 @source:ddr/nanos.cpp
 nanos
 
+@source:ddr/p8k.cpp
+p8000
+p8000_16
+
 @source:ddr/pcm.cpp
 pcm
 
@@ -44406,10 +44410,6 @@ optomaxv
 
 @source:skeleton/orina_stylish_plus.cpp
 orinasp
-
-@source:skeleton/p8k.cpp
-p8000
-p8000_16
 
 @source:skeleton/paipaile.cpp
 paipail3

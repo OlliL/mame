@@ -99,6 +99,12 @@ public:
 
 	u16 get_channel_constant(int ch) const { return m_channel[ch]->m_tconst; }
 
+	// After a software reset (STOP = 1) the down counter is continuously
+	// reloaded from the time constant (Zilog Z80-CTC schematics: LOAD DC is
+	// generated whenever STOP or TO1 = 1), so a read returns the time constant
+	// and not the frozen count.  Opt-in so that other drivers are unaffected.
+	void set_reload_on_reset(bool reload) { m_reload_on_reset = reload; }
+
 protected:
 	z80ctc_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock);
 
@@ -121,6 +127,7 @@ protected:
 
 	// internal state
 	required_device_array<z80ctc_channel_device, 4> m_channel;  // subdevice for each channel
+	bool m_reload_on_reset = false;
 	devcb_write_line                                m_intr_cb;  // interrupt callback
 	devcb_write_line::array<4>                      m_zc_cb;    // zero crossing/timer output callbacks
 
