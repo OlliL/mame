@@ -36,9 +36,20 @@ only P8000; there is no release of them on the EAW floppies. The ROMs of `p8000_
 (MON8 for the 8 bit board and MON16 for the 16 bit board) are named as the files on the
 EAW UDOS and WEGA start floppies.
 
+The console is the terminal of the P8000. Instead of simulating escape sequences it runs
+the terminal firmware on a U882 (Z8) with an i8275 CRTC, the refresh memory, the two
+character generators (ZG0 ASCII, ZG1 German umlauts), an IBM XT keyboard and the bell; it
+starts in ADM-31 mode. It is a private RS-232 port device (`p8k_term.*`) and the default of
+the `rs232` slot of both machines (`-rs232 terminal` still selects the generic terminal).
+Its ROMs are the device romset `p8k_terminal` (`p8t_1_5.0` firmware, `p8tezs` and `p8tdzs`
+character generators), so the machines need that set for the default console. The terminal
+takes every key while its keyboard is active (F3 is its VIDEO key, not the emulator reset),
+so the RESET button of the computer is Ctrl+Pause and the NMI button moved from F12 to Pause.
+
 Not emulated: the stop watch and weekday symbols of the clock module.
 
-Tested: a full build, `mame -validate`, the monitor self tests of both boards,
+Tested: a full build, `mame -validate`, the terminal on both machines (banner of the
+firmware, keys reach the monitor, save and load), the monitor self tests of both boards,
 a complete WEGA installation from the floppies and a boot to multi-user with
 1 MiB of memory. Sources are the P8000 hardware manual, the U880/U855/U8000/U8010
 descriptions, the original circuit diagrams of both boards and the firmware and
