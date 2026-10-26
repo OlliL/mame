@@ -1267,9 +1267,10 @@ bool p8k_state::translate_addr(int spacenum, bool write, offs_t &offset)
 		LOG("%s MMU MEM REQ (space %d): %06x\n", machine().describe_context(), spacenum, offset);
 
 		auto const result = mmu->translate(offset & 0x3f'ffff, write, true, m_dma_on, st);
-		if (result.suppress || ((m_reg_scr & SCR_MMU_ONH) && !result.address_driven))
+		if (result.suppress)
 			return false;
-		if (m_reg_scr & SCR_MMU_ONH)
+		// no MMU drives the bus: address passes through (measured on hardware, differs from sheet 8)
+		if ((m_reg_scr & SCR_MMU_ONH) && result.address_driven)
 			offset = result.address;
 	}
 
