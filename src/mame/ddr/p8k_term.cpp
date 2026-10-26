@@ -101,6 +101,8 @@ private:
 	bool m_drq;
 	bool m_kbd_full;
 	bool m_kbd_ready;
+	int m_host_shift = 0;       // number of shift keys held on the host
+	bool m_quote_active = false; // the shift-aware key was pressed with shift held
 };
 
 p8k_terminal_device::p8k_terminal_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
@@ -186,9 +188,9 @@ static INPUT_PORTS_START(p8k_terminal)
 	KEY(0x00000020, "L", KEYCODE_L, 0x026)
 	KEY(0x00000040, ";", KEYCODE_COLON, 0x027)
 	KEY(0x00000080, "'", KEYCODE_QUOTE, 0x028)
-	KEY(0x00000100, "`", KEYCODE_TILDE, 0x00e)
+	KEY(0x00000100, "^", KEYCODE_TILDE, 0x22b)
 	KEY(0x00000200, "Left Shift", KEYCODE_LSHIFT, 0x02a)
-	KEY(0x00000400, "\\", KEYCODE_BACKSLASH, 0x02b)
+	KEY(0x00000400, "# (')", KEYCODE_BACKSLASH, 0x42b)
 	KEY(0x00000800, "Z", KEYCODE_Z, 0x02c)
 	KEY(0x00001000, "X", KEYCODE_X, 0x02d)
 	KEY(0x00002000, "C", KEYCODE_C, 0x02e)
@@ -314,6 +316,8 @@ void p8k_terminal_device::device_start()
 	save_item(NAME(m_drq));
 	save_item(NAME(m_kbd_full));
 	save_item(NAME(m_kbd_ready));
+	save_item(NAME(m_host_shift));
+	save_item(NAME(m_quote_active));
 }
 
 void p8k_terminal_device::device_reset()
@@ -447,9 +451,35 @@ TIMER_CALLBACK_MEMBER(p8k_terminal_device::kbd_timer)
 void p8k_terminal_device::key_changed(ioport_field &field, uint32_t param, ioport_value oldval, ioport_value newval)
 {
 	bool const pressed = newval != 0;
+	if ((param & 0x7f) == 0x2a)
+		m_host_shift += pressed ? 1 : -1;
+
+	// bit 9: the character is behind shift in the firmware table (^ is 2B shifted)
+	// bit 10: ' (0D unshifted) while shift is held on the host, # (2B) otherwise
+	bool const shifted = BIT(param, 9);
+	bool const quote = BIT(param, 10) && (pressed ? m_host_shift > 0 : m_quote_active);
+	if (BIT(param, 10))
+		m_quote_active = pressed && quote;
+	uint8_t const code = quote ? 0x0d : param & 0x7f;
+
+	// the firmware sees shift only as 2A, so send the shift state the character needs
+	if (pressed)
+	{
+		if (shifted)
+			kbd_queue(0x2a);
+		if (quote)
+			kbd_queue(0xaa);
+	}
 	if (BIT(param, 8))
 		kbd_queue(0xe0);
-	kbd_queue((param & 0x7f) | (pressed ? 0x00 : 0x80));
+	kbd_queue(code | (pressed ? 0x00 : 0x80));
+	if (!pressed)
+	{
+		if (shifted)
+			kbd_queue(0xaa);
+		if (quote && m_host_shift > 0)
+			kbd_queue(0x2a);
+	}
 
 	if (m_kbd_ready && !m_kbd_full && !m_kbd_timer->enabled())
 		m_kbd_timer->adjust(attotime::from_msec(1));
