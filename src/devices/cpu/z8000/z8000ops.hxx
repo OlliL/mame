@@ -5835,9 +5835,10 @@ void z8002_device::ZB0_dddd_0000()
 	bool const lowfix = (m_fcw & F_H) || ((result & 0x0f) > 0x09);
 	if (lowfix)
 		result = subtract ? result - 0x06 : result + 0x06;
-	// after an addition the upper digit is judged by the original byte: adding the
-	// 6 can carry out of the byte (0xfa..0xff), which hides the need for the 0x60
-	bool const highfix = (m_fcw & F_C) || (subtract ? (((result >> 4) & 0x0f) > 0x09) : (orig > 0x99));
+	// the upper digit is judged by the original byte: the low digit correction can carry
+	// out of the byte (0xfa..0xff after an addition) or borrow from it (0x00..0x05 after a
+	// subtraction), which changes the upper digit
+	bool const highfix = (m_fcw & F_C) || (orig > 0x99);
 	if (highfix)
 		result = subtract ? result - 0x60 : result + 0x60;
 	CLR_CZS;
