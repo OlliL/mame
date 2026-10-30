@@ -1,6 +1,7 @@
 # ddr/p8k.cpp, machine/z80pio, z80ctc, z80dma, cpu/z8000: Emulated the P8000 16 bit board, WEGA boots
 
-AI disclosure: this work was done with the help of Claude Sonnet 5.5 (Anthropic).
+AI disclosure: this work was done with the help of Claude Sonnet 5.5, Claude Haiku 5.5 and
+Claude Opus 5.5 (Anthropic).
 I, @OlliL, reviewed and ran everything on the emulator myself, and the behaviour that is
 not obvious from the documents was confirmed on a real P8000.
 
@@ -26,7 +27,10 @@ mode 3 after RETI, several Z8010 commands) are not needed to boot WEGA, so they
 are separate PRs.
 
 Behaviour I could not settle from the documents I measured on a real machine,
-for example that the saved PC segment word keeps bit 15 as the PC holds it.
+for example that the saved PC segment word keeps bit 15 as the PC holds it, and
+that with MMU ON and no MMU driving the bus the board's A8-A23 keep the value of
+the last memory cycle (a fetch at 9100 right after the code MMU was switched off
+read 9000); the standalone diagnostics need this.
 The data/stack MMU selection for a non-segmented user follows the original
 circuit diagram of the 16 bit board (two 74S85 comparators on the break
 register, equality goes to the stack MMU).
@@ -51,8 +55,8 @@ Not emulated: the stop watch and weekday symbols of the clock module.
 Tested: a full build, `mame -validate`, the terminal on both machines (banner of the
 firmware, keys reach the monitor, save and load), the monitor self tests of both boards,
 a complete WEGA installation from the floppies and a boot to multi-user with
-1 MiB of memory. Sources are the P8000 hardware manual, the U880/U855/U8000/U8010
-descriptions, the original circuit diagrams of both boards and the firmware and
+1 MiB of memory, and the standalone diagnostics (`sa.diags`). Sources are the P8000
+hardware manual, the U880/U855/U8000/U8010 descriptions, the original circuit diagrams of both boards and the firmware and
 WEGA sources.
 
 The reasons for each change in the shared devices, with the document and
