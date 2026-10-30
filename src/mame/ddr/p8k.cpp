@@ -487,6 +487,7 @@ private:
 	uint8_t m_lad_low   = 0; // low address byte of the current memory cycle
 	uint8_t m_if1_low   = 0; // low address byte of the last IFETCH1 cycle
 	bool m_segt_state   = false;
+	offs_t m_bus_a8_a23 = 0; // A8-A23 of the memory bus, held while no MMU drives them
 
 	bool m_is_seg_os = true;    // the P8000 operating system is always segmented
 	bool m_is_seg_user = false;
@@ -819,6 +820,7 @@ void p8k_state::machine_start()
 		save_item(NAME(m_lad_low));
 		save_item(NAME(m_if1_low));
 		save_item(NAME(m_segt_state));
+		save_item(NAME(m_bus_a8_a23));
 		save_item(NAME(m_normal_mode));
 		save_item(NAME(m_is_seg_user));
 		save_item(NAME(m_p16a));
@@ -1269,9 +1271,17 @@ bool p8k_state::translate_addr(int spacenum, bool write, offs_t &offset)
 		auto const result = mmu->translate(offset & 0x3f'ffff, write, true, m_dma_on, st);
 		if (result.suppress)
 			return false;
-		// no MMU drives the bus: address passes through (measured on hardware, differs from sheet 8)
-		if ((m_reg_scr & SCR_MMU_ONH) && result.address_driven)
-			offset = result.address;
+		if (m_reg_scr & SCR_MMU_ONH)
+		{
+			// with no MMU driving A8-A23 the lines keep the value of the last memory cycle
+			// that drove them; A0-A7 always come from the CPU (measured on the real board)
+			if (result.address_driven)
+				offset = result.address;
+			else
+				offset = m_bus_a8_a23 | (offset & 0xff);
+		}
+		if (side_effects)
+			m_bus_a8_a23 = offset & 0xff'ff00;
 	}
 
 	return true;
