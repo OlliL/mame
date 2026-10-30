@@ -120,6 +120,7 @@ protected:
 	void enable();
 	void disable();
 	u8 num_follow() const noexcept { return m_num_follow; }
+	virtual u16 byte_counter() const { return m_byte_counter; }
 	int is_ready();
 	void interrupt_check();
 	void trigger_interrupt(int level);
@@ -195,6 +196,9 @@ public:
 	ua858d_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock);
 
 	virtual void write(u8 data) override;
+
+protected:
+	ua858d_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock);
 };
 
 

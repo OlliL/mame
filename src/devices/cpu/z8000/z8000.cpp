@@ -93,7 +93,7 @@ uint32_t z8002_device::addr_sub(uint32_t addr, uint32_t subtrahend)
 uint16_t z8002_device::RDOP()
 {
 	uint16_t res = m_opcache.read_word(m_pc);
-	m_pc += 2;
+	m_pc = addr_add(m_pc, 2);
 	return res;
 }
 
@@ -109,7 +109,7 @@ uint32_t z8002_device::get_operand(int opnum)
 	if (! (m_op_valid & (1 << opnum)))
 	{
 		m_op[opnum] = m_cache.read_word(m_pc);
-		m_pc += 2;
+		m_pc = addr_add(m_pc, 2);
 		m_op_valid |= (1 << opnum);
 	}
 	return m_op[opnum];
@@ -127,14 +127,14 @@ uint32_t z8002_device::get_addr_operand(int opnum)
 	if (! (m_op_valid & (1 << opnum)))
 	{
 		uint32_t seg = m_cache.read_word(m_pc);
-		m_pc += 2;
+		m_pc = addr_add(m_pc, 2);
 		if (get_segmented_mode())
 		{
 			m_addr_b15 = (seg >> 15) & 1;
 			if (seg & 0x8000)
 			{
 				m_op[opnum] = ((seg & 0x7f00) << 8) | m_cache.read_word(m_pc);
-				m_pc += 2;
+				m_pc = addr_add(m_pc, 2);
 			}
 			else
 				m_op[opnum] = ((seg & 0x7f00) << 8) | (seg & 0xff);
@@ -158,13 +158,13 @@ uint32_t z8002_device::get_raw_addr_operand(int opnum)
 	if (! (m_op_valid & (1 << opnum)))
 	{
 		uint32_t seg = m_cache.read_word(m_pc);
-		m_pc += 2;
+		m_pc = addr_add(m_pc, 2);
 		if (get_segmented_mode())
 		{
 			if (seg & 0x8000)
 			{
 				m_op[opnum] = (seg << 16) | m_cache.read_word(m_pc);
-				m_pc += 2;
+				m_pc = addr_add(m_pc, 2);
 			}
 			else
 				m_op[opnum] = (seg << 16) | (seg & 0xff);
